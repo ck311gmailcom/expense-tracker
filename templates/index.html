@@ -54,18 +54,23 @@
 
 
 <!-- Scripts to run in the background? -->
-<script>
-    // set date input to today by default
-    window.onload = function () {
-            const today = new Date().toISOString().split('T')[0];
-            document.getElementById("purchase_date").value = today;
+    <script>
+        window.onload = function () {
+            // Set date input to today
+            document.getElementById("purchase_date").value = new Date().toISOString().split('T')[0];
 
+            // Dark mode toggle
             const toggle = document.getElementById("darkToggle");
+
+            // Apply dark class on page load if checked
+            document.body.classList.toggle("dark", toggle.checked);
+
+            // Listen for toggle changes
             toggle.addEventListener("change", function () {
-                document.body.classList.toggle("dark");
+                document.body.classList.toggle("dark", toggle.checked);
             });
         };
-</script>
+    </script>
 <!-- End scripts -->
 
 </html>
