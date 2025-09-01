@@ -9,7 +9,10 @@ app = Flask(__name__)
 # Set up Google Sheets
 # Render & Google sheets using ckaminski311@gmail.com
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-creds_dict = json.loads(os.environ['GOOGLE_CREDS'])
+# Use the Render secret file path
+secret_path = "/etc/secrets/GOOGLE_CREDS"  # use your secret file name
+with open(secret_path) as f:
+    creds_dict = json.load(f)
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open("Official_Budget").worksheet("Expense Responses")
