@@ -8,15 +8,9 @@ app = Flask(__name__)
 
 # Set up Google Sheets
 # Render & Google sheets using ckaminski311@gmail.com
-#Set up PORT for render to use
-app.run(
-    host="0.0.0.0",
-    port=int(os.environ.get("PORT", 5000)),
-    debug=False
-    )
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 creds_dict = json.loads(os.environ['GOOGLE_CREDS'])
-creds = ServiceAccountCredentials.from_json_keyfile_name(creds_dict, scope)
+creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open("Official_Budget").worksheet("Expense Responses")
 
@@ -42,4 +36,8 @@ def index():
     return render_template("index.html")
 
 if __name__ == "__main__":
-    app.run(debug=False)
+    app.run(
+    host="0.0.0.0",
+    port=int(os.environ.get("PORT", 5000)),
+    debug=False
+    )
