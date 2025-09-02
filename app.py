@@ -6,13 +6,9 @@ import os, json
 
 app = Flask(__name__)
 
-# Set up Google Sheets
-# Render & Google sheets using ckaminski311@gmail.com
+# Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
-# Use the Render secret file path
-secret_path = "/etc/secrets/GOOGLE_CREDS"  # use your secret file name
-with open(secret_path) as f:
-    creds_dict = json.load(f)
+creds_dict = json.loads(os.environ['GOOGLE_CREDS'])
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open("Official_Budget").worksheet("Expense Responses")
@@ -20,30 +16,44 @@ sheet = client.open("Official_Budget").worksheet("Expense Responses")
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        # Generate timestamp on the server side
+        # Server-side timestamp
         timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
+        # Get form values
         purchaseDate = request.form.get("purchase_date")
         itemDesc = request.form.get("item_description")
-        totalAmount = float(request.form.get("total_amount"))
-        tipAmount = float(request.form.get("tip_amount",0))
-        category = request.form.get("category")
+
+        # Safely convert numeric inputs
+        try:
+            totalAmount = float(request.form.get("total_amount") or 0)
+        except ValueError:
+            totalAmount = 0
 
         try:
-        
+            tipAmount = float(request.form.get("tip_amount") or 0)
+        except ValueError:
+            tipAmount = 0
+
+        category = request.form.get("category")
+
+        # Debug prints
+        print("Submitting expense:", timestamp, purchaseDate, itemDesc, totalAmount, tipAmount, category)
+
+        # Update the next empty row explicitly in columns A-F
+        try:
             next_row = len(sheet.col_values(1)) + 1
-            sheet.update(f"A{next_row}:F{next_row}", [[timestamp, purchaseDate, itemDesc, totalAmount, tipAmount, category]])
-            print(f"✅ Added to Google Sheet")
-        
+            sheet.update(
+                f"A{next_row}:F{next_row}",
+                [[timestamp, purchaseDate, itemDesc, totalAmount, tipAmount, category]]
+            )
+            print(f"✅ Added to Google Sheet row {next_row}")
         except Exception as e:
             print(f"❌ Error updating sheet: {e}")
 
         return redirect("/")
+
     return render_template("index.html")
 
 if __name__ == "__main__":
-    app.run(
-    host="0.0.0.0",
-    port=int(os.environ.get("PORT", 5000)),
-    debug=False
-    )
+    port = int(os.environ.get("PORT", 5000))
+    app.run(host="0.0.0.0", port=port, debug=False)
