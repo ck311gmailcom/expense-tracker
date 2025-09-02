@@ -1,8 +1,7 @@
 from flask import Flask, render_template, request, redirect
-import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 from datetime import datetime
-import os, json
+import os, json, gspread, pytz
 
 app = Flask(__name__)
 
@@ -19,8 +18,9 @@ sheet = client.open("Official_Budget").worksheet("Expense Responses")
 @app.route("/", methods=["GET", "POST"])
 def index():
     if request.method == "POST":
-        # Generate timestamp on the server side
-        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        # Generate timestamp
+        tz = pytz.timezone("America/New_York")
+        timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
 
         purchaseDate = request.form.get("purchase_date")
         itemDesc = request.form.get("item_description")
