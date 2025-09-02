@@ -26,8 +26,12 @@ def index():
         purchaseDate = request.form.get("purchase_date")
         itemDesc = request.form.get("item_description")
         totalAmount = float(request.form.get("total_amount"))
-        tipAmount = float(request.form.get("tip_amount", 0))
         category = request.form.get("category")
+
+        try:
+            tipAmount = float(request.form.get("tip_amount"))
+        except (TypeError, ValueError):
+            tipAmount = 0.0
 
         try:
             next_row = len(sheet.col_values(1)) + 1
