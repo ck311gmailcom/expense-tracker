@@ -30,9 +30,8 @@ def index():
         category = request.form.get("category")
 
         try:
-            # Determine next empty row based on Column A
+        
             next_row = len(sheet.col_values(1)) + 1
-            # Update the row explicitly from Column A
             sheet.update(f"A{next_row}:F{next_row}", [[timestamp, purchaseDate, itemDesc, totalAmount, tipAmount, category]])
             print(f"✅ Added to Google Sheet")
         
