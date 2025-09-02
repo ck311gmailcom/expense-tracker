@@ -25,8 +25,8 @@ def index():
 
         purchaseDate = request.form.get("purchase_date")
         itemDesc = request.form.get("item_description")
-        totalAmount = request.form.get("total_amount")
-        tipAmount = request.form.get("tip_amount")
+        totalAmount = float(request.form.get("total_amount"))
+        tipAmount = float(request.form.get("tip_amount",0))
         category = request.form.get("category")
 
         try:
