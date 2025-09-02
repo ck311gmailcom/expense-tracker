@@ -17,7 +17,7 @@
 
     <form method="POST" action="/">
         <label for="purchase_date">Purchase Date:</label>
-        <input type="date" id="purchase_date" name="purchase_date" required><br><br>
+        <input type="date" id="purchase_date" name="purchase_date" value="{{ today }}" required><br><br>
 
         <label for="item_description">Item Description:</label>
         <input type="text" id="item_description" name="item_description" required><br><br>
@@ -58,8 +58,6 @@
 <!-- Scripts to run in the background? -->
     <script>
         window.onload = function () {
-            // Set date input to today
-            document.getElementById("purchase_date").value = new Date().toISOString().split('T')[0];
 
             // Dark mode toggle
             const toggle = document.getElementById("darkToggle");

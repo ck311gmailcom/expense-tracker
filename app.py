@@ -21,6 +21,7 @@ def index():
         # Generate timestamp
         tz = pytz.timezone("America/New_York")
         timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
+        today = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
 
         purchaseDate = request.form.get("purchase_date")
         itemDesc = request.form.get("item_description")
@@ -47,7 +48,7 @@ def index():
 
         return redirect("/")
 
-    return render_template("index.html")
+    return render_template("index.html", today=today)
 
 if __name__ == "__main__":
     app.run(
