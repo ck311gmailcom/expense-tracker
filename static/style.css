@@ -39,6 +39,41 @@ input, select, button {
     box-sizing: border-box;
 }
 
+/* Subcategory styling */
+.subcategory-container {
+    margin-top: 8px;
+    margin-bottom: 20px;
+}
+
+.checkbox-label {
+    display: block;
+    margin-bottom: 8px;
+    font-weight: normal;
+    cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+    width: auto;
+    margin-right: 8px;
+    margin-bottom: 0;
+}
+
+#otherSubcategory {
+    margin-left: 20px;
+    width: calc(100% - 20px);
+}
+
+#otherCategory {
+    margin-top: 8px;
+    margin-bottom: 20px;
+    width: 100%;
+    padding: 10px;
+    border: 1px solid #ccc;
+    border-radius: 6px;
+    font-size: 1rem;
+    box-sizing: border-box;
+}
+
 /* Submit button */
 button {
     background-color: #28a745;
@@ -75,7 +110,9 @@ body.dark .container {
 }
 
 body.dark input,
-body.dark select {
+body.dark select,
+body.dark #otherSubcategory,
+body.dark #otherCategory {
     background-color: #2a2a2a;
     color: #eee;
     border: 1px solid #555;

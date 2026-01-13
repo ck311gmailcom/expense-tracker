@@ -27,6 +27,25 @@ def index():
         itemDesc = request.form.get("item_description")
         totalAmount = float(request.form.get("total_amount"))
         category = request.form.get("category")
+        other_category = request.form.get("other_category", "").strip()
+        
+        # Handle "Other" category
+        if category == "Other" and other_category:
+            category = other_category
+        elif category == "Other" and not other_category:
+            category = "Other"  # Keep as "Other" if no text provided
+        
+        subcategories = request.form.getlist("subcategories")
+        other_text = request.form.get("other_subcategory", "").strip()
+        
+        # Handle "Other" subcategory
+        if "Other" in subcategories and other_text:
+            subcategories[subcategories.index("Other")] = other_text
+        elif "Other" in subcategories and not other_text:
+            subcategories.remove("Other")  # Remove if no text provided
+        
+        # Convert subcategories to comma-separated string
+        subcategory_str = ", ".join(subcategories) if subcategories else ""
 
         try:
             tipAmount = float(request.form.get("tip_amount"))
@@ -35,8 +54,8 @@ def index():
 
         try:
             next_row = len(sheet.col_values(1)) + 1
-            sheet.update(f"A{next_row}:F{next_row}",
-                         [[timestamp, purchaseDate, itemDesc, totalAmount, tipAmount, category]])
+            sheet.update(f"A{next_row}:G{next_row}",
+                         [[timestamp, purchaseDate, itemDesc, totalAmount, tipAmount, category, subcategory_str]])
             print(f"✅ Added to Google Sheet")
         except Exception as e:
             print(f"❌ Error updating sheet: {e}")
