@@ -96,7 +96,8 @@
                 <span class="budget-value" id="budgetAfter"></span>
             </div>
             <div class="budget-bar-container">
-                <div class="budget-bar-fill" id="budgetBarFill"></div>
+                <div class="budget-bar-existing" id="budgetBarExisting"></div>
+                <div class="budget-bar-new" id="budgetBarNew"></div>
             </div>
             <div class="budget-remaining" id="budgetRemaining"></div>
         </div><br><br>
@@ -180,7 +181,8 @@
                 <span class="budget-value" id="savingsGoalAfter"></span>
             </div>
             <div class="budget-bar-container">
-                <div class="budget-bar-fill" id="savingsGoalBarFill"></div>
+                <div class="budget-bar-existing" id="savingsGoalBarExisting"></div>
+                <div class="budget-bar-new" id="savingsGoalBarNew"></div>
             </div>
             <div class="budget-remaining" id="savingsGoalRemaining"></div>
         </div>
@@ -379,7 +381,8 @@
             var budgetAmount = document.getElementById("budgetAmount");
             var budgetActual = document.getElementById("budgetActual");
             var budgetAfter = document.getElementById("budgetAfter");
-            var budgetBarFill = document.getElementById("budgetBarFill");
+            var budgetBarExisting = document.getElementById("budgetBarExisting");
+            var budgetBarNew = document.getElementById("budgetBarNew");
             var budgetRemaining = document.getElementById("budgetRemaining");
             var totalAmountHidden = document.getElementById("total_amount");
             var purchaseDateInput = document.getElementById("purchase_date");
@@ -406,14 +409,18 @@
                 budgetActual.textContent = "$" + actual.toFixed(2);
                 budgetAfter.textContent = "$" + afterThis.toFixed(2);
 
-                var pct = budgeted > 0 ? (afterThis / budgeted) * 100 : 0;
-                budgetBarFill.style.width = Math.min(pct, 100) + "%";
+                var existingPct = budgeted > 0 ? Math.min((actual / budgeted) * 100, 100) : 0;
+                var newPct = budgeted > 0 ? Math.min((expenseAmount / budgeted) * 100, 100 - existingPct) : 0;
+                budgetBarExisting.style.width = existingPct + "%";
+                budgetBarNew.style.width = newPct + "%";
 
                 var overBudget = afterThis > budgeted && budgeted > 0;
                 var nearBudget = afterThis > budgeted * 0.85 && !overBudget;
+                var colorClass = overBudget ? " over-budget" : nearBudget ? " near-budget" : "";
 
-                budgetAfter.className = "budget-value" + (overBudget ? " over-budget" : nearBudget ? " near-budget" : "");
-                budgetBarFill.className = "budget-bar-fill" + (overBudget ? " over-budget" : nearBudget ? " near-budget" : "");
+                budgetAfter.className = "budget-value" + colorClass;
+                budgetBarExisting.className = "budget-bar-existing" + colorClass;
+                budgetBarNew.className = "budget-bar-new" + colorClass;
 
                 if (overBudget) {
                     var overBy = afterThis - budgeted;
@@ -442,7 +449,8 @@
             var savingsGoalAmount = document.getElementById("savingsGoalAmount");
             var savingsGoalActual = document.getElementById("savingsGoalActual");
             var savingsGoalAfter = document.getElementById("savingsGoalAfter");
-            var savingsGoalBarFill = document.getElementById("savingsGoalBarFill");
+            var savingsGoalBarExisting = document.getElementById("savingsGoalBarExisting");
+            var savingsGoalBarNew = document.getElementById("savingsGoalBarNew");
             var savingsGoalRemaining = document.getElementById("savingsGoalRemaining");
             var savingsAmountHidden = document.getElementById("savings_amount");
             var contributeDateInput = document.getElementById("contribute_date");
@@ -469,14 +477,18 @@
                 savingsGoalActual.textContent = "$" + actual.toFixed(2);
                 savingsGoalAfter.textContent = "$" + afterThis.toFixed(2);
 
-                var pct = goal > 0 ? (afterThis / goal) * 100 : 0;
-                savingsGoalBarFill.style.width = Math.min(pct, 100) + "%";
+                var existingPct = goal > 0 ? Math.min((actual / goal) * 100, 100) : 0;
+                var newPct = goal > 0 ? Math.min((contributionAmount / goal) * 100, 100 - existingPct) : 0;
+                savingsGoalBarExisting.style.width = existingPct + "%";
+                savingsGoalBarNew.style.width = newPct + "%";
 
                 var metGoal = afterThis >= goal && goal > 0;
                 var nearGoal = afterThis >= goal * 0.85 && !metGoal;
+                var colorClass = metGoal ? " met-goal" : nearGoal ? " near-goal" : "";
 
-                savingsGoalAfter.className = "budget-value" + (metGoal ? " met-goal" : nearGoal ? " near-goal" : "");
-                savingsGoalBarFill.className = "budget-bar-fill" + (metGoal ? " met-goal" : nearGoal ? " near-goal" : "");
+                savingsGoalAfter.className = "budget-value" + colorClass;
+                savingsGoalBarExisting.className = "budget-bar-existing" + colorClass;
+                savingsGoalBarNew.className = "budget-bar-new" + colorClass;
 
                 if (metGoal) {
                     var overBy = afterThis - goal;

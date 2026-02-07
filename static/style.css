@@ -285,25 +285,40 @@ body.dark .savings-mode button:hover {
 }
 
 .budget-bar-container {
-    height: 6px;
+    height: 10px;
     background-color: #e9ecef;
-    border-radius: 3px;
+    border-radius: 5px;
     margin: 8px 0 6px 0;
     overflow: hidden;
+    display: flex;
 }
 
-.budget-bar-fill {
+.budget-bar-existing {
     height: 100%;
     background-color: #28a745;
-    border-radius: 3px;
     transition: width 0.3s ease, background-color 0.3s ease;
 }
 
-.budget-bar-fill.near-budget {
+.budget-bar-new {
+    height: 100%;
+    background-color: #28a745;
+    background-image: repeating-linear-gradient(
+        -45deg,
+        transparent,
+        transparent 3px,
+        rgba(255, 255, 255, 0.35) 3px,
+        rgba(255, 255, 255, 0.35) 6px
+    );
+    transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.budget-bar-existing.near-budget,
+.budget-bar-new.near-budget {
     background-color: #e68a00;
 }
 
-.budget-bar-fill.over-budget {
+.budget-bar-existing.over-budget,
+.budget-bar-new.over-budget {
     background-color: #dc3545;
 }
 
@@ -329,11 +344,13 @@ body.dark .savings-mode button:hover {
     font-weight: 700;
 }
 
-.budget-bar-fill.met-goal {
+.budget-bar-existing.met-goal,
+.budget-bar-new.met-goal {
     background-color: #28a745;
 }
 
-.budget-bar-fill.near-goal {
+.budget-bar-existing.near-goal,
+.budget-bar-new.near-goal {
     background-color: #e68a00;
 }
 
@@ -342,7 +359,8 @@ body.dark .savings-mode button:hover {
 }
 
 /* Savings goal preview - blue bar by default (not yet near goal) */
-.savings-goal-preview .budget-bar-fill {
+.savings-goal-preview .budget-bar-existing,
+.savings-goal-preview .budget-bar-new {
     background-color: #5b9bd5;
 }
 
@@ -380,15 +398,18 @@ body.dark .budget-bar-container {
     background-color: #3a3a3a;
 }
 
-body.dark .budget-bar-fill {
+body.dark .budget-bar-existing,
+body.dark .budget-bar-new {
     background-color: #3fa96a;
 }
 
-body.dark .budget-bar-fill.near-budget {
+body.dark .budget-bar-existing.near-budget,
+body.dark .budget-bar-new.near-budget {
     background-color: #ffb347;
 }
 
-body.dark .budget-bar-fill.over-budget {
+body.dark .budget-bar-existing.over-budget,
+body.dark .budget-bar-new.over-budget {
     background-color: #ff6b7a;
 }
 
@@ -409,11 +430,13 @@ body.dark .budget-value.near-goal {
     color: #ffb347;
 }
 
-body.dark .budget-bar-fill.met-goal {
+body.dark .budget-bar-existing.met-goal,
+body.dark .budget-bar-new.met-goal {
     background-color: #3fa96a;
 }
 
-body.dark .budget-bar-fill.near-goal {
+body.dark .budget-bar-existing.near-goal,
+body.dark .budget-bar-new.near-goal {
     background-color: #ffb347;
 }
 
@@ -421,7 +444,8 @@ body.dark .budget-remaining.met-goal {
     color: #5ddb78;
 }
 
-body.dark .savings-goal-preview .budget-bar-fill {
+body.dark .savings-goal-preview .budget-bar-existing,
+body.dark .savings-goal-preview .budget-bar-new {
     background-color: #4a89c0;
 }
 
