@@ -3,9 +3,25 @@ from datetime import datetime
 import pytz
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import os, json
+import os, json, re, logging
+
+APP_VERSION = "2.1"
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
+
+def parse_number(val):
+    """Parse a number from various formats: 500, '500', '$500.00', '1,234.56'"""
+    if val is None:
+        return 0.0
+    if isinstance(val, (int, float)):
+        return float(val)
+    cleaned = re.sub(r'[^\d.\-]', '', str(val))
+    try:
+        return float(cleaned) if cleaned else 0.0
+    except (ValueError, TypeError):
+        return 0.0
 
 # Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -18,6 +34,10 @@ spreadsheet = client.open("Official_Budget")
 sheet = spreadsheet.worksheet("Expense Responses")
 income_sheet = spreadsheet.worksheet("Income")
 
+@app.route("/version")
+def version():
+    return f"v{APP_VERSION}"
+
 @app.route("/", methods=["GET", "POST"])
 def index():
     tz = pytz.timezone("America/New_York")
@@ -27,9 +47,9 @@ def index():
     # Read hourly rate from Income tab (L3 = Total Active Salary Rate)
     hourly_rate = None
     try:
-        hourly_rate = float(income_sheet.acell('L3').value)
-    except:
-        pass  # hourly_rate = 27.26  # Fallback for local dev (from Income!L3)
+        hourly_rate = parse_number(income_sheet.acell('L3').value)
+    except Exception as e:
+        logger.error(f"Error reading hourly rate: {e}")
 
     # Read budget data from current + previous month tabs
     # Structure: {"Feb2026": {category: {budgeted, actual}}, "Jan2026": {...}}
@@ -51,39 +71,37 @@ def index():
         tab_name = f"{month_abbrevs[m - 1]}{y}"
         try:
             budget_ws = spreadsheet.worksheet(tab_name)
+            logger.info(f"Loaded budget tab: {tab_name}")
 
             # Expense categories: G7:I24, Bill categories: G29:I32
-            expense_range = budget_ws.get('G7:I24')
-            bill_range = budget_ws.get('G29:I32')
+            # Use UNFORMATTED_VALUE to get raw numbers (avoids "$500.00" strings)
+            expense_range = budget_ws.get('G7:I24', value_render_option='UNFORMATTED_VALUE')
+            bill_range = budget_ws.get('G29:I32', value_render_option='UNFORMATTED_VALUE')
 
             month_budget = {}
             for row in expense_range + bill_range:
                 if len(row) >= 2 and row[0]:
-                    cat_name = row[0].strip()
+                    cat_name = str(row[0]).strip()
                     app_cat_name = category_map.get(cat_name, cat_name)
-                    try:
-                        budgeted = float(row[1]) if len(row) > 1 and row[1] else 0
-                        actual = float(row[2]) if len(row) > 2 and row[2] else 0
-                        month_budget[app_cat_name] = {"budgeted": budgeted, "actual": actual}
-                    except (ValueError, TypeError):
-                        pass
+                    budgeted = parse_number(row[1]) if len(row) > 1 else 0
+                    actual = parse_number(row[2]) if len(row) > 2 else 0
+                    month_budget[app_cat_name] = {"budgeted": budgeted, "actual": actual}
             budget_data[tab_name] = month_budget
+            logger.info(f"Budget categories for {tab_name}: {list(month_budget.keys())}")
 
             # Savings goal data: Expected Motion section B30:D32
             month_savings = {}
-            savings_range = budget_ws.get('B30:D32')
+            savings_range = budget_ws.get('B30:D32', value_render_option='UNFORMATTED_VALUE')
             for row in savings_range:
                 if len(row) >= 2 and row[0]:
-                    cat_name = row[0].strip()
-                    try:
-                        expected = float(row[1]) if len(row) > 1 and row[1] else 0
-                        actual = float(row[2]) if len(row) > 2 and row[2] else 0
-                        month_savings[cat_name] = {"expected": expected, "actual": actual}
-                    except (ValueError, TypeError):
-                        pass
+                    cat_name = str(row[0]).strip()
+                    expected = parse_number(row[1]) if len(row) > 1 else 0
+                    actual = parse_number(row[2]) if len(row) > 2 else 0
+                    month_savings[cat_name] = {"expected": expected, "actual": actual}
             savings_budget_data[tab_name] = month_savings
-        except:
-            pass  # Tab not found or Google Sheets not available
+            logger.info(f"Savings categories for {tab_name}: {list(month_savings.keys())}")
+        except Exception as e:
+            logger.error(f"Error loading budget tab {tab_name}: {e}")
 
     # Read recent expenses from Google Sheets (sorted by purchase date)
     # Uses header row to find columns dynamically
@@ -93,19 +111,22 @@ def index():
         all_values = sheet.get_all_values()
         if all_values:
             headers = [h.strip().lower() for h in all_values[0]]
+            logger.info(f"Sheet headers: {headers[:10]}")
 
             # Find expense column indices from headers
             date_col = next((i for i, h in enumerate(headers) if 'purchase' in h and 'date' in h), 1)
             amount_col = next((i for i, h in enumerate(headers) if 'total' in h and 'amount' in h), 3)
             category_col = next((i for i, h in enumerate(headers) if h == 'category'), 5)
+            logger.info(f"Column indices - date: {date_col}, amount: {amount_col}, category: {category_col}")
 
             data_rows = all_values[1:]
             data_rows.sort(key=lambda r: r[date_col] if len(r) > date_col and r[date_col] else "", reverse=True)
             for row in data_rows[:5]:
-                amt = row[amount_col] if len(row) > amount_col else "0"
+                amt_raw = row[amount_col] if len(row) > amount_col else "0"
+                amt = parse_number(amt_raw)
                 recent_expenses.append({
                     "date": row[date_col] if len(row) > date_col else "",
-                    "amount": amt if amt else "0",
+                    "amount": amt,
                     "category": row[category_col] if len(row) > category_col else ""
                 })
 
@@ -117,14 +138,15 @@ def index():
                     savings_rows.append(row)
             savings_rows.sort(key=lambda r: r[12] if r[12] else "", reverse=True)
             for row in savings_rows[:5]:
-                amt = row[14] if len(row) > 14 else "0"
+                amt_raw = row[14] if len(row) > 14 else "0"
+                amt = parse_number(amt_raw)
                 recent_savings.append({
                     "date": row[12],
-                    "amount": amt if amt else "0",
+                    "amount": amt,
                     "category": row[15] if len(row) > 15 else ""
                 })
-    except:
-        pass  # Google Sheets not available (local dev)
+    except Exception as e:
+        logger.error(f"Error reading recent expenses/savings: {e}")
 
     if request.method == "POST":
         form_type = request.form.get("form_type")

@@ -370,6 +370,8 @@
             // Budget data keyed by month: {"Feb2026": {category: {budgeted, actual}}, ...}
             var allBudgetData = {{ budget_data | tojson }};
             var allSavingsBudgetData = {{ savings_budget_data | tojson }};
+            console.log("v2.1 | Budget data:", JSON.stringify(allBudgetData));
+            console.log("v2.1 | Savings data:", JSON.stringify(allSavingsBudgetData));
 
             // --- Expense budget preview ---
             var budgetPreview = document.getElementById("budgetPreview");
