@@ -3,9 +3,9 @@ from datetime import datetime
 import pytz
 import gspread
 from oauth2client.service_account import ServiceAccountCredentials
-import os, json, re, logging
+import os, json, re, logging, time
 
-APP_VERSION = "2.1"
+APP_VERSION = "2.2"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -22,6 +22,18 @@ def parse_number(val):
         return float(cleaned) if cleaned else 0.0
     except (ValueError, TypeError):
         return 0.0
+
+# Simple in-memory cache with TTL
+_cache = {}
+
+def cache_get(key, ttl, fetch_fn):
+    """Return cached value if fresh, otherwise fetch and cache."""
+    now_t = time.time()
+    if key in _cache and now_t - _cache[key]['t'] < ttl:
+        return _cache[key]['d']
+    data = fetch_fn()
+    _cache[key] = {'t': now_t, 'd': data}
+    return data
 
 # Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
@@ -41,114 +53,10 @@ def version():
 @app.route("/", methods=["GET", "POST"])
 def index():
     tz = pytz.timezone("America/New_York")
-    today = datetime.now(tz).strftime("%Y-%m-%d")
-    submitted_type = request.args.get("submitted")  # 'expense' or 'savings' or None
 
-    # Read hourly rate from Income tab (L3 = Total Active Salary Rate)
-    hourly_rate = None
-    try:
-        hourly_rate = parse_number(income_sheet.acell('L3').value)
-    except Exception as e:
-        logger.error(f"Error reading hourly rate: {e}")
-
-    # Read budget data from current + previous month tabs
-    # Structure: {"Feb2026": {category: {budgeted, actual}}, "Jan2026": {...}}
-    budget_data = {}
-    savings_budget_data = {}
-    month_abbrevs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-    category_map = {"Travel": "Travel/Uber"}
-
-    now = datetime.now(tz)
-    # Build list of months to load: current + previous
-    months_to_load = []
-    months_to_load.append((now.month, now.year))
-    prev_month = now.month - 1 if now.month > 1 else 12
-    prev_year = now.year if now.month > 1 else now.year - 1
-    months_to_load.append((prev_month, prev_year))
-
-    for m, y in months_to_load:
-        tab_name = f"{month_abbrevs[m - 1]}{y}"
-        try:
-            budget_ws = spreadsheet.worksheet(tab_name)
-            logger.info(f"Loaded budget tab: {tab_name}")
-
-            # Expense categories: G7:I24, Bill categories: G29:I32
-            # Use UNFORMATTED_VALUE to get raw numbers (avoids "$500.00" strings)
-            expense_range = budget_ws.get('G7:I24', value_render_option='UNFORMATTED_VALUE')
-            bill_range = budget_ws.get('G29:I32', value_render_option='UNFORMATTED_VALUE')
-
-            month_budget = {}
-            for row in expense_range + bill_range:
-                if len(row) >= 2 and row[0]:
-                    cat_name = str(row[0]).strip()
-                    app_cat_name = category_map.get(cat_name, cat_name)
-                    budgeted = parse_number(row[1]) if len(row) > 1 else 0
-                    actual = parse_number(row[2]) if len(row) > 2 else 0
-                    month_budget[app_cat_name] = {"budgeted": budgeted, "actual": actual}
-            budget_data[tab_name] = month_budget
-            logger.info(f"Budget categories for {tab_name}: {list(month_budget.keys())}")
-
-            # Savings goal data: Expected Motion section B30:D32
-            month_savings = {}
-            savings_range = budget_ws.get('B30:D32', value_render_option='UNFORMATTED_VALUE')
-            for row in savings_range:
-                if len(row) >= 2 and row[0]:
-                    cat_name = str(row[0]).strip()
-                    expected = parse_number(row[1]) if len(row) > 1 else 0
-                    actual = parse_number(row[2]) if len(row) > 2 else 0
-                    month_savings[cat_name] = {"expected": expected, "actual": actual}
-            savings_budget_data[tab_name] = month_savings
-            logger.info(f"Savings categories for {tab_name}: {list(month_savings.keys())}")
-        except Exception as e:
-            logger.error(f"Error loading budget tab {tab_name}: {e}")
-
-    # Read recent expenses from Google Sheets (sorted by purchase date)
-    # Uses header row to find columns dynamically
-    recent_expenses = []
-    recent_savings = []
-    try:
-        all_values = sheet.get_all_values()
-        if all_values:
-            headers = [h.strip().lower() for h in all_values[0]]
-            logger.info(f"Sheet headers: {headers[:10]}")
-
-            # Find expense column indices from headers
-            date_col = next((i for i, h in enumerate(headers) if 'purchase' in h and 'date' in h), 1)
-            amount_col = next((i for i, h in enumerate(headers) if 'total' in h and 'amount' in h), 3)
-            category_col = next((i for i, h in enumerate(headers) if h == 'category'), 5)
-            logger.info(f"Column indices - date: {date_col}, amount: {amount_col}, category: {category_col}")
-
-            data_rows = all_values[1:]
-            data_rows.sort(key=lambda r: r[date_col] if len(r) > date_col and r[date_col] else "", reverse=True)
-            for row in data_rows[:5]:
-                amt_raw = row[amount_col] if len(row) > amount_col else "0"
-                amt = parse_number(amt_raw)
-                recent_expenses.append({
-                    "date": row[date_col] if len(row) > date_col else "",
-                    "amount": amt,
-                    "category": row[category_col] if len(row) > category_col else ""
-                })
-
-            # Read recent savings from columns L-P
-            # L=Timestamp(11), M=Contribute Date(12), N=Description(13), O=Amount(14), P=Category(15)
-            savings_rows = []
-            for row in all_values[1:]:
-                if len(row) > 14 and row[12]:  # col M (contribute date) exists
-                    savings_rows.append(row)
-            savings_rows.sort(key=lambda r: r[12] if r[12] else "", reverse=True)
-            for row in savings_rows[:5]:
-                amt_raw = row[14] if len(row) > 14 else "0"
-                amt = parse_number(amt_raw)
-                recent_savings.append({
-                    "date": row[12],
-                    "amount": amt,
-                    "category": row[15] if len(row) > 15 else ""
-                })
-    except Exception as e:
-        logger.error(f"Error reading recent expenses/savings: {e}")
-
+    # Handle POST first — skips all data reads, saves ~10 API calls per submission
     if request.method == "POST":
+        _cache.clear()
         form_type = request.form.get("form_type")
         timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
 
@@ -214,6 +122,112 @@ def index():
 
             print(f"✅ Expense logged: {purchaseDate} | {itemDesc} | ${totalAmount} | Tip: ${tipAmount} | {category} | {subcategory_str}")
             return redirect("/?submitted=expense")
+
+    # --- GET request: read and display data ---
+    today = datetime.now(tz).strftime("%Y-%m-%d")
+    submitted_type = request.args.get("submitted")
+
+    # Hourly rate (cached 30 min — rarely changes)
+    hourly_rate = None
+    try:
+        hourly_rate = cache_get('hourly_rate', 1800,
+            lambda: parse_number(income_sheet.acell('L3').value))
+    except Exception as e:
+        logger.error(f"Error reading hourly rate: {e}")
+
+    # Budget data (cached 5 min, cleared on POST)
+    month_abbrevs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    category_map = {"Travel": "Travel/Uber"}
+    now = datetime.now(tz)
+    months_to_load = [(now.month, now.year)]
+    prev_month = now.month - 1 if now.month > 1 else 12
+    prev_year = now.year if now.month > 1 else now.year - 1
+    months_to_load.append((prev_month, prev_year))
+
+    def _fetch_budgets():
+        _bd, _sbd = {}, {}
+        for m, y in months_to_load:
+            tab_name = f"{month_abbrevs[m - 1]}{y}"
+            try:
+                budget_ws = spreadsheet.worksheet(tab_name)
+                logger.info(f"Loaded budget tab: {tab_name}")
+                # batch_get: 1 API call instead of 3 per tab
+                ranges = budget_ws.batch_get(
+                    ['G7:I24', 'G29:I32', 'B30:D32'],
+                    value_render_option='UNFORMATTED_VALUE'
+                )
+                expense_range, bill_range, savings_range = ranges[0], ranges[1], ranges[2]
+
+                month_budget = {}
+                for row in expense_range + bill_range:
+                    if len(row) >= 2 and row[0]:
+                        cat_name = str(row[0]).strip()
+                        app_cat_name = category_map.get(cat_name, cat_name)
+                        budgeted = parse_number(row[1]) if len(row) > 1 else 0
+                        actual = parse_number(row[2]) if len(row) > 2 else 0
+                        month_budget[app_cat_name] = {"budgeted": budgeted, "actual": actual}
+                _bd[tab_name] = month_budget
+                logger.info(f"Budget categories for {tab_name}: {list(month_budget.keys())}")
+
+                month_savings = {}
+                for row in savings_range:
+                    if len(row) >= 2 and row[0]:
+                        cat_name = str(row[0]).strip()
+                        expected = parse_number(row[1]) if len(row) > 1 else 0
+                        actual = parse_number(row[2]) if len(row) > 2 else 0
+                        month_savings[cat_name] = {"expected": expected, "actual": actual}
+                _sbd[tab_name] = month_savings
+                logger.info(f"Savings categories for {tab_name}: {list(month_savings.keys())}")
+            except Exception as e:
+                logger.error(f"Error loading budget tab {tab_name}: {e}")
+        return _bd, _sbd
+
+    budget_data, savings_budget_data = {}, {}
+    cached = cache_get('budgets', 300, _fetch_budgets)
+    if cached:
+        budget_data, savings_budget_data = cached
+
+    # Recent expenses (always fresh — just 1 API call)
+    recent_expenses = []
+    recent_savings = []
+    try:
+        all_values = sheet.get_all_values()
+        if all_values:
+            headers = [h.strip().lower() for h in all_values[0]]
+            logger.info(f"Sheet headers: {headers[:10]}")
+
+            date_col = next((i for i, h in enumerate(headers) if 'purchase' in h and 'date' in h), 1)
+            amount_col = next((i for i, h in enumerate(headers) if 'total' in h and 'amount' in h), 3)
+            category_col = next((i for i, h in enumerate(headers) if h == 'category'), 5)
+            logger.info(f"Column indices - date: {date_col}, amount: {amount_col}, category: {category_col}")
+
+            data_rows = all_values[1:]
+            data_rows.sort(key=lambda r: r[date_col] if len(r) > date_col and r[date_col] else "", reverse=True)
+            for row in data_rows[:5]:
+                amt_raw = row[amount_col] if len(row) > amount_col else "0"
+                amt = parse_number(amt_raw)
+                recent_expenses.append({
+                    "date": row[date_col] if len(row) > date_col else "",
+                    "amount": amt,
+                    "category": row[category_col] if len(row) > category_col else ""
+                })
+
+            savings_rows = []
+            for row in all_values[1:]:
+                if len(row) > 14 and row[12]:
+                    savings_rows.append(row)
+            savings_rows.sort(key=lambda r: r[12] if r[12] else "", reverse=True)
+            for row in savings_rows[:5]:
+                amt_raw = row[14] if len(row) > 14 else "0"
+                amt = parse_number(amt_raw)
+                recent_savings.append({
+                    "date": row[12],
+                    "amount": amt,
+                    "category": row[15] if len(row) > 15 else ""
+                })
+    except Exception as e:
+        logger.error(f"Error reading recent expenses/savings: {e}")
 
     return render_template("index.html", today=today, submitted_type=submitted_type,
                            recent_expenses=recent_expenses, recent_savings=recent_savings,

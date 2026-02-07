@@ -162,8 +162,8 @@ body.dark select option[disabled] {
 
 /* Subcategory styling */
 .subcategory-container {
-    margin-top: 8px;
-    margin-bottom: 20px;
+    margin-top: 4px;
+    margin-bottom: 4px;
 }
 
 .checkbox-label {
