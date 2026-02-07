@@ -30,49 +30,59 @@ def index():
     except:
         pass  # hourly_rate = 27.26  # Fallback for local dev (from Income!L3)
 
-    # Read budget data from current month's tab (e.g., "Feb2026")
-    # Maps category name → {"budgeted": float, "actual": float}
+    # Read budget data from current + previous month tabs
+    # Structure: {"Feb2026": {category: {budgeted, actual}}, "Jan2026": {...}}
     budget_data = {}
     savings_budget_data = {}
-    try:
-        now = datetime.now(tz)
-        month_abbrevs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
-                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
-        month_tab_name = f"{month_abbrevs[now.month - 1]}{now.year}"
-        budget_sheet = client.open("Official_Budget").worksheet(month_tab_name)
+    month_abbrevs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+    category_map = {"Travel": "Travel/Uber"}
 
-        # Expense categories: G7:I24, Bill categories: G29:I32
-        expense_range = budget_sheet.get('G7:I24')
-        bill_range = budget_sheet.get('G29:I32')
+    now = datetime.now(tz)
+    # Build list of months to load: current + previous
+    months_to_load = []
+    months_to_load.append((now.month, now.year))
+    prev_month = now.month - 1 if now.month > 1 else 12
+    prev_year = now.year if now.month > 1 else now.year - 1
+    months_to_load.append((prev_month, prev_year))
 
-        # Map sheet category names to app category names where they differ
-        category_map = {"Travel": "Travel/Uber"}
+    for m, y in months_to_load:
+        tab_name = f"{month_abbrevs[m - 1]}{y}"
+        try:
+            budget_ws = client.open("Official_Budget").worksheet(tab_name)
 
-        for row in expense_range + bill_range:
-            if len(row) >= 2 and row[0]:
-                cat_name = row[0].strip()
-                app_cat_name = category_map.get(cat_name, cat_name)
-                try:
-                    budgeted = float(row[1]) if len(row) > 1 and row[1] else 0
-                    actual = float(row[2]) if len(row) > 2 and row[2] else 0
-                    budget_data[app_cat_name] = {"budgeted": budgeted, "actual": actual}
-                except (ValueError, TypeError):
-                    pass
+            # Expense categories: G7:I24, Bill categories: G29:I32
+            expense_range = budget_ws.get('G7:I24')
+            bill_range = budget_ws.get('G29:I32')
 
-        # Savings goal data: Expected Motion section B30:D32
-        # (B30=Roth IRA, B31=Investments, B32=Savings)
-        savings_range = budget_sheet.get('B30:D32')
-        for row in savings_range:
-            if len(row) >= 2 and row[0]:
-                cat_name = row[0].strip()
-                try:
-                    expected = float(row[1]) if len(row) > 1 and row[1] else 0
-                    actual = float(row[2]) if len(row) > 2 and row[2] else 0
-                    savings_budget_data[cat_name] = {"expected": expected, "actual": actual}
-                except (ValueError, TypeError):
-                    pass
-    except:
-        pass  # Google Sheets not available (local dev)
+            month_budget = {}
+            for row in expense_range + bill_range:
+                if len(row) >= 2 and row[0]:
+                    cat_name = row[0].strip()
+                    app_cat_name = category_map.get(cat_name, cat_name)
+                    try:
+                        budgeted = float(row[1]) if len(row) > 1 and row[1] else 0
+                        actual = float(row[2]) if len(row) > 2 and row[2] else 0
+                        month_budget[app_cat_name] = {"budgeted": budgeted, "actual": actual}
+                    except (ValueError, TypeError):
+                        pass
+            budget_data[tab_name] = month_budget
+
+            # Savings goal data: Expected Motion section B30:D32
+            month_savings = {}
+            savings_range = budget_ws.get('B30:D32')
+            for row in savings_range:
+                if len(row) >= 2 and row[0]:
+                    cat_name = row[0].strip()
+                    try:
+                        expected = float(row[1]) if len(row) > 1 and row[1] else 0
+                        actual = float(row[2]) if len(row) > 2 and row[2] else 0
+                        month_savings[cat_name] = {"expected": expected, "actual": actual}
+                    except (ValueError, TypeError):
+                        pass
+            savings_budget_data[tab_name] = month_savings
+        except:
+            pass  # Tab not found or Google Sheets not available
 
     # Read recent expenses from Google Sheets (sorted by purchase date)
     recent_expenses = []

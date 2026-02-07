@@ -331,8 +331,23 @@
                 }
             });
 
-            // Budget preview - show budgeted vs actual when category is selected
-            var budgetData = {{ budget_data | tojson }};
+            // Helper: convert date string "2026-02-15" → month key "Feb2026"
+            var monthShort = ["Jan","Feb","Mar","Apr","May","Jun","Jul","Aug","Sep","Oct","Nov","Dec"];
+            function dateToMonthKey(dateStr) {
+                if (!dateStr) return null;
+                var parts = dateStr.split("-");
+                if (parts.length < 2) return null;
+                var y = parseInt(parts[0]);
+                var m = parseInt(parts[1]);
+                if (isNaN(y) || isNaN(m) || m < 1 || m > 12) return null;
+                return monthShort[m - 1] + y;
+            }
+
+            // Budget data keyed by month: {"Feb2026": {category: {budgeted, actual}}, ...}
+            var allBudgetData = {{ budget_data | tojson }};
+            var allSavingsBudgetData = {{ savings_budget_data | tojson }};
+
+            // --- Expense budget preview ---
             var budgetPreview = document.getElementById("budgetPreview");
             var budgetCategoryName = document.getElementById("budgetCategoryName");
             var budgetAmount = document.getElementById("budgetAmount");
@@ -341,31 +356,33 @@
             var budgetBarFill = document.getElementById("budgetBarFill");
             var budgetRemaining = document.getElementById("budgetRemaining");
             var totalAmountHidden = document.getElementById("total_amount");
+            var purchaseDateInput = document.getElementById("purchase_date");
 
             function updateBudgetPreview() {
                 var cat = categorySelect.value;
-                if (!cat || !budgetData[cat]) {
+                var monthKey = dateToMonthKey(purchaseDateInput.value);
+                var monthData = monthKey ? allBudgetData[monthKey] : null;
+
+                if (!cat || !monthData || !monthData[cat]) {
                     budgetPreview.style.display = "none";
                     return;
                 }
 
-                var info = budgetData[cat];
+                var info = monthData[cat];
                 var budgeted = info.budgeted;
                 var actual = info.actual;
                 var expenseAmount = parseFloat(totalAmountHidden.value) || 0;
                 var afterThis = actual + expenseAmount;
 
                 budgetPreview.style.display = "block";
-                budgetCategoryName.textContent = cat;
+                budgetCategoryName.textContent = cat + " (" + monthKey + ")";
                 budgetAmount.textContent = "$" + budgeted.toFixed(2);
                 budgetActual.textContent = "$" + actual.toFixed(2);
                 budgetAfter.textContent = "$" + afterThis.toFixed(2);
 
-                // Progress bar
                 var pct = budgeted > 0 ? (afterThis / budgeted) * 100 : 0;
                 budgetBarFill.style.width = Math.min(pct, 100) + "%";
 
-                // Color coding
                 var overBudget = afterThis > budgeted && budgeted > 0;
                 var nearBudget = afterThis > budgeted * 0.85 && !overBudget;
 
@@ -384,16 +401,15 @@
             }
 
             categorySelect.addEventListener("change", updateBudgetPreview);
+            purchaseDateInput.addEventListener("change", updateBudgetPreview);
 
-            // Also update budget preview when amount changes
             var totalAmountDisplay = document.getElementById("total_amount_display");
             totalAmountDisplay.addEventListener("input", updateBudgetPreview);
             totalAmountDisplay.addEventListener("keydown", function () {
                 setTimeout(updateBudgetPreview, 10);
             });
 
-            // Savings goal preview - reversed colors (green = met/exceeded goal)
-            var savingsBudgetData = {{ savings_budget_data | tojson }};
+            // --- Savings goal preview (reversed colors) ---
             var savingsCategorySelect = document.getElementById("savings_category");
             var savingsGoalPreview = document.getElementById("savingsGoalPreview");
             var savingsGoalName = document.getElementById("savingsGoalName");
@@ -403,31 +419,33 @@
             var savingsGoalBarFill = document.getElementById("savingsGoalBarFill");
             var savingsGoalRemaining = document.getElementById("savingsGoalRemaining");
             var savingsAmountHidden = document.getElementById("savings_amount");
+            var contributeDateInput = document.getElementById("contribute_date");
 
             function updateSavingsGoalPreview() {
                 var cat = savingsCategorySelect.value;
-                if (!cat || !savingsBudgetData[cat]) {
+                var monthKey = dateToMonthKey(contributeDateInput.value);
+                var monthData = monthKey ? allSavingsBudgetData[monthKey] : null;
+
+                if (!cat || !monthData || !monthData[cat]) {
                     savingsGoalPreview.style.display = "none";
                     return;
                 }
 
-                var info = savingsBudgetData[cat];
+                var info = monthData[cat];
                 var goal = info.expected;
                 var actual = info.actual;
                 var contributionAmount = parseFloat(savingsAmountHidden.value) || 0;
                 var afterThis = actual + contributionAmount;
 
                 savingsGoalPreview.style.display = "block";
-                savingsGoalName.textContent = cat;
+                savingsGoalName.textContent = cat + " (" + monthKey + ")";
                 savingsGoalAmount.textContent = "$" + goal.toFixed(2);
                 savingsGoalActual.textContent = "$" + actual.toFixed(2);
                 savingsGoalAfter.textContent = "$" + afterThis.toFixed(2);
 
-                // Progress bar
                 var pct = goal > 0 ? (afterThis / goal) * 100 : 0;
                 savingsGoalBarFill.style.width = Math.min(pct, 100) + "%";
 
-                // Reversed color logic: meeting/exceeding goal = green!
                 var metGoal = afterThis >= goal && goal > 0;
                 var nearGoal = afterThis >= goal * 0.85 && !metGoal;
 
@@ -450,8 +468,8 @@
             }
 
             savingsCategorySelect.addEventListener("change", updateSavingsGoalPreview);
+            contributeDateInput.addEventListener("change", updateSavingsGoalPreview);
 
-            // Also update savings goal preview when amount changes
             var savingsAmountDisplay = document.getElementById("savings_amount_display");
             savingsAmountDisplay.addEventListener("input", updateSavingsGoalPreview);
             savingsAmountDisplay.addEventListener("keydown", function () {
