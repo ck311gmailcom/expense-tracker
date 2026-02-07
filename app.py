@@ -1,4 +1,4 @@
-from flask import Flask, render_template, request, redirect
+from flask import Flask, render_template, request, redirect, url_for
 from datetime import datetime
 import pytz
 import gspread
@@ -7,7 +7,7 @@ import os, json
 
 app = Flask(__name__)
 
-# Google Sheets setup...
+# Google Sheets setup
 scope = ["https://spreadsheets.google.com/feeds", "https://www.googleapis.com/auth/drive"]
 secret_path = "/etc/secrets/GOOGLE_CREDS"
 with open(secret_path) as f:
@@ -15,54 +15,150 @@ with open(secret_path) as f:
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
 sheet = client.open("Official_Budget").worksheet("Expense Responses")
+income_sheet = client.open("Official_Budget").worksheet("Income")
 
 @app.route("/", methods=["GET", "POST"])
 def index():
     tz = pytz.timezone("America/New_York")
-    today = datetime.now(tz).strftime("%Y-%m-%d")  # ensure it's always set
+    today = datetime.now(tz).strftime("%Y-%m-%d")
+    submitted_type = request.args.get("submitted")  # 'expense' or 'savings' or None
+
+    # Read hourly rate from Income tab (L3 = Total Active Salary Rate)
+    hourly_rate = None
+    try:
+        hourly_rate = float(income_sheet.acell('L3').value)
+    except:
+        pass  # hourly_rate = 27.26  # Fallback for local dev (from Income!L3)
+
+    # Read budget data from current month's tab (e.g., "Feb2026")
+    # Maps category name → {"budgeted": float, "actual": float}
+    budget_data = {}
+    savings_budget_data = {}
+    try:
+        now = datetime.now(tz)
+        month_abbrevs = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+                         'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+        month_tab_name = f"{month_abbrevs[now.month - 1]}{now.year}"
+        budget_sheet = client.open("Official_Budget").worksheet(month_tab_name)
+
+        # Expense categories: G7:I24, Bill categories: G29:I32
+        expense_range = budget_sheet.get('G7:I24')
+        bill_range = budget_sheet.get('G29:I32')
+
+        # Map sheet category names to app category names where they differ
+        category_map = {"Travel": "Travel/Uber"}
+
+        for row in expense_range + bill_range:
+            if len(row) >= 2 and row[0]:
+                cat_name = row[0].strip()
+                app_cat_name = category_map.get(cat_name, cat_name)
+                try:
+                    budgeted = float(row[1]) if len(row) > 1 and row[1] else 0
+                    actual = float(row[2]) if len(row) > 2 and row[2] else 0
+                    budget_data[app_cat_name] = {"budgeted": budgeted, "actual": actual}
+                except (ValueError, TypeError):
+                    pass
+
+        # Savings goal data: Expected Motion section B30:D32
+        # (B30=Roth IRA, B31=Investments, B32=Savings)
+        savings_range = budget_sheet.get('B30:D32')
+        for row in savings_range:
+            if len(row) >= 2 and row[0]:
+                cat_name = row[0].strip()
+                try:
+                    expected = float(row[1]) if len(row) > 1 and row[1] else 0
+                    actual = float(row[2]) if len(row) > 2 and row[2] else 0
+                    savings_budget_data[cat_name] = {"expected": expected, "actual": actual}
+                except (ValueError, TypeError):
+                    pass
+    except:
+        pass  # Google Sheets not available (local dev)
+
+    # Read recent expenses from Google Sheets (sorted by purchase date)
+    recent_expenses = []
+    try:
+        all_values = sheet.get_all_values()
+        data_rows = all_values[1:]  # skip header
+        data_rows.sort(key=lambda r: r[1] if r[1] else "", reverse=True)
+        for row in data_rows[:5]:
+            recent_expenses.append({
+                "date": row[1],
+                "amount": row[3],
+                "category": row[5]
+            })
+    except:
+        pass  # Google Sheets not available (local dev)
 
     if request.method == "POST":
+        form_type = request.form.get("form_type")
         timestamp = datetime.now(tz).strftime("%Y-%m-%d %H:%M:%S")
-        purchaseDate = request.form.get("purchase_date")
-        itemDesc = request.form.get("item_description")
-        totalAmount = float(request.form.get("total_amount"))
-        category = request.form.get("category")
-        other_category = request.form.get("other_category", "").strip()
-        
-        # Handle "Other" category
-        if category == "Other" and other_category:
-            category = other_category
-        elif category == "Other" and not other_category:
-            category = "Other"  # Keep as "Other" if no text provided
-        
-        subcategories = request.form.getlist("subcategories")
-        other_text = request.form.get("other_subcategory", "").strip()
-        
-        # Handle "Other" subcategory
-        if "Other" in subcategories and other_text:
-            subcategories[subcategories.index("Other")] = other_text
-        elif "Other" in subcategories and not other_text:
-            subcategories.remove("Other")  # Remove if no text provided
-        
-        # Convert subcategories to comma-separated string
-        subcategory_str = ", ".join(subcategories) if subcategories else ""
 
-        try:
-            tipAmount = float(request.form.get("tip_amount"))
-        except (TypeError, ValueError):
-            tipAmount = 0.0
+        if form_type == "savings":
+            contributeDate = request.form.get("contribute_date")
+            description = request.form.get("savings_description")
+            savingsAmount = float(request.form.get("savings_amount"))
+            savingsCategory = request.form.get("savings_category")
 
-        try:
-            next_row = len(sheet.col_values(1)) + 1
-            sheet.update(f"A{next_row}:G{next_row}",
-                         [[timestamp, purchaseDate, itemDesc, totalAmount, tipAmount, category, subcategory_str]])
-            print(f"✅ Added to Google Sheet")
-        except Exception as e:
-            print(f"❌ Error updating sheet: {e}")
+            # Google Sheets update - writes to columns L-P in Expense Responses
+            try:
+                next_row = len(sheet.col_values(12)) + 1  # Column L
+                sheet.update(f"L{next_row}:P{next_row}",
+                             [[timestamp, contributeDate, description, savingsAmount, savingsCategory]],
+                             value_input_option='USER_ENTERED')
+                print(f"✅ Savings added to Google Sheet")
+            except Exception as e:
+                print(f"❌ Error updating sheet: {e}")
 
-        return redirect("/")
+            print(f"✅ Savings logged: {contributeDate} | {description} | ${savingsAmount} | {savingsCategory}")
+            return redirect("/?submitted=savings")
 
-    return render_template("index.html", today=today)
+        else:
+            purchaseDate = request.form.get("purchase_date")
+            itemDesc = request.form.get("item_description")
+            totalAmount = float(request.form.get("total_amount"))
+            category = request.form.get("category")
+            other_category = request.form.get("other_category", "").strip()
+
+            # Handle "Other" category
+            if category == "Other" and other_category:
+                category = other_category
+            elif category == "Other" and not other_category:
+                category = "Other"
+
+            subcategories = request.form.getlist("subcategories")
+            other_text = request.form.get("other_subcategory", "").strip()
+
+            # Handle "Other" subcategory
+            if "Other" in subcategories and other_text:
+                subcategories[subcategories.index("Other")] = other_text
+            elif "Other" in subcategories and not other_text:
+                subcategories.remove("Other")
+
+            subcategory_str = ", ".join(subcategories) if subcategories else ""
+
+            try:
+                tipAmount = float(request.form.get("tip_amount"))
+            except (TypeError, ValueError):
+                tipAmount = 0.0
+
+            # Google Sheets update - Insert at row 2 so newest expenses are always at the top
+            try:
+                sheet.insert_rows(
+                    [[timestamp, purchaseDate, itemDesc, totalAmount, tipAmount, category, subcategory_str,
+                      '', '=IF(ISBLANK(E2),"",IFERROR(D2-E2,"N/A"))', '=IF(ISBLANK(E2),"",IFERROR(E2/(D2-E2),"N/A"))']],
+                    row=2,
+                    value_input_option='USER_ENTERED'
+                )
+                print(f"✅ Added to Google Sheet")
+            except Exception as e:
+                print(f"❌ Error updating sheet: {e}")
+
+            print(f"✅ Expense logged: {purchaseDate} | {itemDesc} | ${totalAmount} | Tip: ${tipAmount} | {category} | {subcategory_str}")
+            return redirect("/?submitted=expense")
+
+    return render_template("index.html", today=today, submitted_type=submitted_type,
+                           recent_expenses=recent_expenses, hourly_rate=hourly_rate,
+                           budget_data=budget_data, savings_budget_data=savings_budget_data)
 
 if __name__ == "__main__":
     app.run(

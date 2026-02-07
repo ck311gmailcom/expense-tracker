@@ -9,22 +9,118 @@ body {
 
 .container {
     max-width: 500px;
-    margin: 40px auto;
-    padding: 20px;
+    margin: -1px auto 40px auto;
+    padding: 0;
     background: #ffffff;
-    border-radius: 10px;
+    border-radius: 0 10px 10px 10px;
     box-shadow: 0 2px 12px rgba(0, 0, 0, 0.1);
+    border: 1px solid #ddd;
+    position: relative;
 }
 
-.header {
+.tab-wrapper {
+    max-width: 502px;
+    margin: 40px auto 0 auto;
+    padding: 0;
+}
+
+.form-content {
+    padding: 20px;
+}
+
+/* Tab Bar */
+.tab-bar {
     display: flex;
-    justify-content: space-between;
-    align-items: center;
+    align-items: flex-end;
+    margin: 0 0 0 -1px;
+    position: relative;
 }
 
-h1 {
-    margin: 0 0 20px 0;
-    font-size: 1.5rem;
+.tab {
+    padding: 10px 28px;
+    cursor: pointer;
+    font-size: 0.95rem;
+    font-weight: 600;
+    color: #888;
+    background-color: #e8e8e8;
+    border: 1px solid #ddd;
+    border-bottom: none;
+    border-radius: 10px 10px 0 0;
+    margin-right: 2px;
+    position: relative;
+    top: 1px;
+    transition: color 0.2s, background-color 0.2s;
+    user-select: none;
+}
+
+.tab:hover {
+    color: #555;
+    background-color: #f0f0f0;
+}
+
+.tab.active {
+    color: #333;
+    background-color: #ffffff;
+    border-color: #ddd;
+    z-index: 1;
+    position: relative;
+}
+
+.tab.active::after {
+    content: "";
+    position: absolute;
+    bottom: 0;
+    left: 10px;
+    right: 10px;
+    height: 3px;
+    border-radius: 3px 3px 0 0;
+    background-color: #28a745;
+}
+
+/* Blue line for savings tab */
+.savings-mode #tabSavings.active::after {
+    background-color: #5b9bd5;
+}
+
+body.dark .tab.active::after {
+    background-color: #3fa96a;
+}
+
+body.dark .savings-mode #tabSavings.active::after {
+    background-color: #6ba3e8;
+}
+
+.tab-toggle {
+    margin-left: auto;
+    margin-bottom: 8px;
+    margin-right: 4px;
+}
+
+/* Dark mode tabs */
+body.dark .container {
+    border-color: #444;
+}
+
+body.dark .tab {
+    color: #777;
+    background-color: #161616;
+    border-color: #444;
+}
+
+body.dark .tab:hover {
+    color: #bbb;
+    background-color: #1a1a1a;
+}
+
+body.dark .tab.active {
+    color: #eee;
+    background-color: #1e1e1e;
+    border-color: #444;
+}
+
+/* Savings mode - container gets rounded top-left since active tab isn't first */
+.savings-mode.container {
+    border-radius: 10px 10px 10px 10px;
 }
 
 /* Input styling */
@@ -37,6 +133,31 @@ input, select, button {
     border-radius: 6px;
     font-size: 1rem;
     box-sizing: border-box;
+}
+
+/* Placeholder style for select dropdown */
+select:invalid {
+    color: #999;
+}
+
+select option {
+    color: #333;
+}
+
+select option[disabled] {
+    color: #999;
+}
+
+body.dark select:invalid {
+    color: #777;
+}
+
+body.dark select option {
+    color: #eee;
+}
+
+body.dark select option[disabled] {
+    color: #777;
 }
 
 /* Subcategory styling */
@@ -87,15 +208,305 @@ button:hover {
     background-color: #218838;
 }
 
+/* Savings mode - blue button */
+.savings-mode button {
+    background-color: #5b9bd5;
+}
+
+.savings-mode button:hover {
+    background-color: #4a89c0;
+}
+
+body.dark .savings-mode button {
+    background-color: #4a89c0;
+}
+
+body.dark .savings-mode button:hover {
+    background-color: #3d78ab;
+}
+
+/* Savings success banner - blue */
+.success-banner.savings-banner {
+    background-color: #5b9bd5;
+}
+
 /* Responsive */
 @media (max-width: 600px) {
-    .container {
-        margin: 20px;
+    .tab-wrapper {
+        margin: 20px 20px 0 20px;
     }
 
-    h1 {
-        font-size: 1.25rem;
+    .container {
+        margin: 0 20px 20px 20px;
     }
+}
+
+/* Budget Preview Box */
+.budget-preview {
+    background-color: #f8f9fa;
+    border: 1px solid #ddd;
+    border-radius: 6px;
+    padding: 12px 14px;
+    margin-top: -8px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+}
+
+.budget-header {
+    font-weight: 700;
+    font-size: 0.9rem;
+    margin-bottom: 8px;
+    color: #333;
+}
+
+.budget-row {
+    display: flex;
+    justify-content: space-between;
+    margin-bottom: 4px;
+}
+
+.budget-label {
+    color: #666;
+}
+
+.budget-value {
+    font-weight: 600;
+    color: #333;
+}
+
+.budget-value.over-budget {
+    color: #dc3545;
+    font-weight: 700;
+}
+
+.budget-value.near-budget {
+    color: #e68a00;
+    font-weight: 700;
+}
+
+.budget-bar-container {
+    height: 6px;
+    background-color: #e9ecef;
+    border-radius: 3px;
+    margin: 8px 0 6px 0;
+    overflow: hidden;
+}
+
+.budget-bar-fill {
+    height: 100%;
+    background-color: #28a745;
+    border-radius: 3px;
+    transition: width 0.3s ease, background-color 0.3s ease;
+}
+
+.budget-bar-fill.near-budget {
+    background-color: #e68a00;
+}
+
+.budget-bar-fill.over-budget {
+    background-color: #dc3545;
+}
+
+.budget-remaining {
+    font-size: 0.8rem;
+    color: #28a745;
+    font-weight: 600;
+    text-align: right;
+}
+
+.budget-remaining.over-budget {
+    color: #dc3545;
+}
+
+/* Savings goal preview - green when meeting/exceeding goal */
+.budget-value.met-goal {
+    color: #28a745;
+    font-weight: 700;
+}
+
+.budget-value.near-goal {
+    color: #e68a00;
+    font-weight: 700;
+}
+
+.budget-bar-fill.met-goal {
+    background-color: #28a745;
+}
+
+.budget-bar-fill.near-goal {
+    background-color: #e68a00;
+}
+
+.budget-remaining.met-goal {
+    color: #28a745;
+}
+
+/* Savings goal preview - blue bar by default (not yet near goal) */
+.savings-goal-preview .budget-bar-fill {
+    background-color: #5b9bd5;
+}
+
+.savings-goal-preview .budget-remaining {
+    color: #5b9bd5;
+}
+
+/* Dark mode budget preview */
+body.dark .budget-preview {
+    background-color: #252525;
+    border-color: #444;
+}
+
+body.dark .budget-header {
+    color: #eee;
+}
+
+body.dark .budget-label {
+    color: #999;
+}
+
+body.dark .budget-value {
+    color: #eee;
+}
+
+body.dark .budget-value.over-budget {
+    color: #ff6b7a;
+}
+
+body.dark .budget-value.near-budget {
+    color: #ffb347;
+}
+
+body.dark .budget-bar-container {
+    background-color: #3a3a3a;
+}
+
+body.dark .budget-bar-fill {
+    background-color: #3fa96a;
+}
+
+body.dark .budget-bar-fill.near-budget {
+    background-color: #ffb347;
+}
+
+body.dark .budget-bar-fill.over-budget {
+    background-color: #ff6b7a;
+}
+
+body.dark .budget-remaining {
+    color: #3fa96a;
+}
+
+body.dark .budget-remaining.over-budget {
+    color: #ff6b7a;
+}
+
+/* Dark mode savings goal colors */
+body.dark .budget-value.met-goal {
+    color: #5ddb78;
+}
+
+body.dark .budget-value.near-goal {
+    color: #ffb347;
+}
+
+body.dark .budget-bar-fill.met-goal {
+    background-color: #3fa96a;
+}
+
+body.dark .budget-bar-fill.near-goal {
+    background-color: #ffb347;
+}
+
+body.dark .budget-remaining.met-goal {
+    color: #5ddb78;
+}
+
+body.dark .savings-goal-preview .budget-bar-fill {
+    background-color: #4a89c0;
+}
+
+body.dark .savings-goal-preview .budget-remaining {
+    color: #6ba3e8;
+}
+
+/* Work Hours Box */
+.work-hours-box {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    background-color: #f0f4ff;
+    border: 1px solid #c8d6f0;
+    border-radius: 6px;
+    padding: 8px 12px;
+    margin-bottom: 16px;
+    font-size: 0.85rem;
+}
+
+.work-hours-rate {
+    color: #666;
+}
+
+.work-hours-calc {
+    color: #2a5db0;
+}
+
+body.dark .work-hours-box {
+    background-color: #1a2333;
+    border-color: #2a3a55;
+}
+
+body.dark .work-hours-rate {
+    color: #999;
+}
+
+body.dark .work-hours-calc {
+    color: #6ba3e8;
+}
+
+/* Success Banner */
+.success-banner {
+    background-color: #28a745;
+    color: white;
+    text-align: center;
+    padding: 10px;
+    border-radius: 6px;
+    margin-bottom: 20px;
+    font-weight: bold;
+    transition: opacity 0.4s ease;
+}
+
+/* Recent Expenses Table */
+.recent-expenses {
+    margin-top: 30px;
+    border-top: 1px solid #ddd;
+    padding-top: 15px;
+}
+
+.recent-expenses h3 {
+    margin: 0 0 12px 0;
+    font-size: 1rem;
+    color: #555;
+}
+
+.recent-expenses table {
+    width: 100%;
+    border-collapse: collapse;
+    font-size: 0.9rem;
+}
+
+.recent-expenses th {
+    text-align: left;
+    padding: 6px 8px;
+    border-bottom: 2px solid #ddd;
+    font-weight: 600;
+    color: #777;
+    font-size: 0.8rem;
+    text-transform: uppercase;
+}
+
+.recent-expenses td {
+    padding: 8px;
+    border-bottom: 1px solid #eee;
 }
 
 /* Dark Mode */
@@ -107,6 +518,7 @@ body.dark {
 body.dark .container {
     background-color: #1e1e1e;
     box-shadow: 0 0 10px rgba(255, 255, 255, 0.05);
+    border-color: #444;
 }
 
 body.dark input,
@@ -116,6 +528,23 @@ body.dark #otherCategory {
     background-color: #2a2a2a;
     color: #eee;
     border: 1px solid #555;
+}
+
+body.dark .recent-expenses {
+    border-top-color: #444;
+}
+
+body.dark .recent-expenses h3 {
+    color: #aaa;
+}
+
+body.dark .recent-expenses th {
+    border-bottom-color: #444;
+    color: #999;
+}
+
+body.dark .recent-expenses td {
+    border-bottom-color: #333;
 }
 
 body.dark button {

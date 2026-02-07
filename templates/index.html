@@ -4,52 +4,102 @@
     <title>Expense Tracker</title>
     <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-180.png') }}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Expenses">
 </head>
 <body>
-    <div class="container">
-    <div class="header">
-    <h1>Log an Expense</h1>
-    <label class="switch">
-        <input type="checkbox" id="darkToggle" checked>
-        <span class="slider"></span>
-    </label>
+    <!-- Tabs + Toggle -->
+    <div class="tab-wrapper">
+        <div class="tab-bar">
+            <div class="tab active" id="tabExpense" onclick="switchTab('expense')">Expense</div>
+            <div class="tab" id="tabSavings" onclick="switchTab('savings')">Savings</div>
+            <label class="switch tab-toggle">
+                <input type="checkbox" id="darkToggle" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
     </div>
+    <div class="container">
+    <div class="form-content">
 
+    {% if submitted_type == 'expense' %}
+    <div class="success-banner" id="successBanner">Expense submitted!</div>
+    {% elif submitted_type == 'savings' %}
+    <div class="success-banner savings-banner" id="successBanner">Savings contribution submitted!</div>
+    {% endif %}
+
+    <!-- Expense Form -->
+    <div id="expenseForm">
     <form method="POST" action="/">
+        <input type="hidden" name="form_type" value="expense">
+
         <label for="purchase_date">Purchase Date:</label>
         <input type="date" id="purchase_date" name="purchase_date" value="{{ today }}" required><br><br>
 
         <label for="item_description">Item Description:</label>
         <input type="text" id="item_description" name="item_description" required><br><br>
 
-        <label for="total_amount">Total Amount ($):</label>
-        <input type="number" step="0.01" id="total_amount" name="total_amount" required><br><br>
+        <label for="total_amount_display">Total Amount ($):</label>
+        <input type="text" inputmode="numeric" id="total_amount_display" placeholder="0.00" required>
+        <input type="hidden" id="total_amount" name="total_amount">
 
-        <label for="tip_amount">Tip Amount ($):</label>
-        <input type="number" step="0.01" id="tip_amount" name="tip_amount"><br><br>
+        <label for="tip_amount_display">Tip Amount ($):</label>
+        <input type="text" inputmode="numeric" id="tip_amount_display" placeholder="0.00">
+        <input type="hidden" id="tip_amount" name="tip_amount">
 
-        <label for="category">Category:</label>
+        {% if hourly_rate %}
+        <div class="work-hours-box" id="workHoursBox" style="display: none;">
+            <span class="work-hours-rate">Hourly rate: ${{ "%.2f"|format(hourly_rate) }}/hr</span>
+            <span class="work-hours-calc">This costs <strong id="workHoursValue">0</strong> hours of work</span>
+        </div>
+        {% endif %}
+
         <select id="category" name="category" required>
-            <option value="">-- Select --</option>
+            <option value="" disabled selected>-- Category --</option>
+            <option value="Eating Out">Eating Out</option>
+            <option value="Doordash">Doordash</option>
+            <option value="Groceries">Groceries</option>
+            <option value="Rent">Rent</option>
+            <option value="Personal Care">Personal Care</option>
+            <option value="Going out/Bars/Drinks">Going out/Bars/Drinks</option>
+            <option value="Utilities">Utilities</option>
+            <option value="Gas">Gas</option>
+            <option value="Travel/Uber">Travel/Uber</option>
+            <option value="Car Related">Car Related</option>
+            <option value="Car Insurance">Car Insurance</option>
+            <option value="Student Loans">Student Loans</option>
+            <option value="Home Goods">Home Goods</option>
             <option value="Subscriptions">Subscriptions</option>
             <option value="Entertainment">Entertainment</option>
-            <option value="Eating Out">Eating Out</option>
-            <option value="Going out/Bars/Drinks">Going out/Bars/Drinks</option>
-            <option value="Groceries">Groceries</option>
-            <option value="Doordash">Doordash</option>
             <option value="Clothes">Clothes</option>
-            <option value="Travel/Uber">Travel/Uber</option>
-            <option value="Gas">Gas</option>
             <option value="Pet Related">Pet Related</option>
-            <option value="Home Goods">Home Goods</option>
-            <option value="Personal Care">Personal Care</option>
-            <option value="Car Related">Car Related</option>
             <option value="Gifts">Gifts</option>
-            <option value="Rent">Rent</option>
-            <option value="Utilities">Utilities</option>
+            <option value="Dates">Dates</option>
+            <option value="Vacation">Vacation</option>
             <option value="Other">Other</option>
         </select>
-        <input type="text" id="otherCategory" name="other_category" placeholder="Specify other category" style="display: none;"><br><br>
+        <input type="text" id="otherCategory" name="other_category" placeholder="Specify other category" style="display: none;">
+
+        <div class="budget-preview" id="budgetPreview" style="display: none;">
+            <div class="budget-header" id="budgetCategoryName"></div>
+            <div class="budget-row">
+                <span class="budget-label">Budget:</span>
+                <span class="budget-value" id="budgetAmount"></span>
+            </div>
+            <div class="budget-row">
+                <span class="budget-label">Spent so far:</span>
+                <span class="budget-value" id="budgetActual"></span>
+            </div>
+            <div class="budget-row">
+                <span class="budget-label">After this expense:</span>
+                <span class="budget-value" id="budgetAfter"></span>
+            </div>
+            <div class="budget-bar-container">
+                <div class="budget-bar-fill" id="budgetBarFill"></div>
+            </div>
+            <div class="budget-remaining" id="budgetRemaining"></div>
+        </div><br><br>
 
         <label>Subcategories (Optional):</label>
         <div class="subcategory-container">
@@ -60,9 +110,6 @@
                 <input type="checkbox" name="subcategories" value="After drinking"> After drinking
             </label>
             <label class="checkbox-label">
-                <input type="checkbox" name="subcategories" value="Gift"> Gift
-            </label>
-            <label class="checkbox-label">
                 <input type="checkbox" name="subcategories" value="Other" id="otherCheckbox"> Other:
             </label>
             <input type="text" id="otherSubcategory" name="other_subcategory" placeholder="Specify other subcategory" style="display: none; margin-top: 5px;">
@@ -70,21 +117,186 @@
 
         <button type="submit">Submit Expense</button>
     </form>
+
+    {% if recent_expenses %}
+    <div class="recent-expenses">
+        <h3>Recent Expenses</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Category</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for expense in recent_expenses %}
+                <tr>
+                    <td>{{ expense.date }}</td>
+                    <td>${{ "%.2f"|format(expense.amount|float) }}</td>
+                    <td>{{ expense.category }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
+    </div>
+
+    <!-- Savings Form -->
+    <div id="savingsForm" style="display: none;">
+    <form method="POST" action="/">
+        <input type="hidden" name="form_type" value="savings">
+
+        <label for="contribute_date">Contribute Date:</label>
+        <input type="date" id="contribute_date" name="contribute_date" value="{{ today }}" required><br><br>
+
+        <label for="savings_description">Description:</label>
+        <input type="text" id="savings_description" name="savings_description" required><br><br>
+
+        <label for="savings_amount_display">Total Amount ($):</label>
+        <input type="text" inputmode="numeric" id="savings_amount_display" placeholder="0.00" required>
+        <input type="hidden" id="savings_amount" name="savings_amount">
+
+        <select id="savings_category" name="savings_category" required>
+            <option value="" disabled selected>-- Category --</option>
+            <option value="Investments">Investments</option>
+            <option value="Roth IRA">Roth IRA</option>
+            <option value="Savings">Savings</option>
+        </select>
+
+        <div class="budget-preview savings-goal-preview" id="savingsGoalPreview" style="display: none;">
+            <div class="budget-header" id="savingsGoalName"></div>
+            <div class="budget-row">
+                <span class="budget-label">Monthly Goal:</span>
+                <span class="budget-value" id="savingsGoalAmount"></span>
+            </div>
+            <div class="budget-row">
+                <span class="budget-label">Contributed so far:</span>
+                <span class="budget-value" id="savingsGoalActual"></span>
+            </div>
+            <div class="budget-row">
+                <span class="budget-label">After this contribution:</span>
+                <span class="budget-value" id="savingsGoalAfter"></span>
+            </div>
+            <div class="budget-bar-container">
+                <div class="budget-bar-fill" id="savingsGoalBarFill"></div>
+            </div>
+            <div class="budget-remaining" id="savingsGoalRemaining"></div>
+        </div>
+
+        <button type="submit">Submit Contribution</button>
+    </form>
+    </div>
+
+    </div>
     </div>
 </body>
 
 
-<!-- Scripts to run in the background? -->
+<!-- Scripts -->
     <script>
+        // Tab switching
+        function switchTab(tab) {
+            var expenseForm = document.getElementById("expenseForm");
+            var savingsForm = document.getElementById("savingsForm");
+            var tabExpense = document.getElementById("tabExpense");
+            var tabSavings = document.getElementById("tabSavings");
+            var container = document.querySelector(".container");
+            var tabWrapper = document.querySelector(".tab-wrapper");
+
+            if (tab === "expense") {
+                expenseForm.style.display = "block";
+                savingsForm.style.display = "none";
+                tabExpense.classList.add("active");
+                tabSavings.classList.remove("active");
+                container.classList.remove("savings-mode");
+                tabWrapper.classList.remove("savings-mode");
+            } else {
+                expenseForm.style.display = "none";
+                savingsForm.style.display = "block";
+                tabExpense.classList.remove("active");
+                tabSavings.classList.add("active");
+                container.classList.add("savings-mode");
+                tabWrapper.classList.add("savings-mode");
+            }
+        }
+
         window.onload = function () {
+
+            // Auto-dismiss success banner after 3 seconds and clean URL
+            const banner = document.getElementById("successBanner");
+            if (banner) {
+                // If savings was just submitted, switch to savings tab
+                {% if submitted_type == 'savings' %}
+                switchTab('savings');
+                {% endif %}
+                history.replaceState(null, "", "/");
+                setTimeout(function () {
+                    banner.style.opacity = "0";
+                    setTimeout(function () { banner.remove(); }, 400);
+                }, 3000);
+            }
+
+            // Auto-decimal currency input (type 1234 → shows 12.34)
+            function setupCurrencyInput(displayId, hiddenId) {
+                const display = document.getElementById(displayId);
+                const hidden = document.getElementById(hiddenId);
+                if (!display || !hidden) return;
+                let rawDigits = "";
+
+                display.addEventListener("input", function () {
+                    rawDigits = display.value.replace(/[^0-9]/g, "");
+                    rawDigits = rawDigits.replace(/^0+/, "") || "0";
+                    const cents = parseInt(rawDigits, 10);
+                    const dollars = (cents / 100).toFixed(2);
+                    display.value = dollars;
+                    hidden.value = dollars;
+                });
+
+                display.addEventListener("keydown", function (e) {
+                    if (e.key === "Backspace") {
+                        e.preventDefault();
+                        rawDigits = rawDigits.slice(0, -1) || "0";
+                        const cents = parseInt(rawDigits, 10);
+                        const dollars = (cents / 100).toFixed(2);
+                        display.value = dollars === "0.00" ? "" : dollars;
+                        hidden.value = dollars;
+                    }
+                });
+            }
+
+            setupCurrencyInput("total_amount_display", "total_amount");
+            setupCurrencyInput("tip_amount_display", "tip_amount");
+            setupCurrencyInput("savings_amount_display", "savings_amount");
+
+            // Hours of work calculator (updates as you type total amount)
+            var hourlyRate = {{ hourly_rate if hourly_rate else 'null' }};
+            if (hourlyRate) {
+                var workBox = document.getElementById("workHoursBox");
+                var workVal = document.getElementById("workHoursValue");
+                var totalHidden = document.getElementById("total_amount");
+
+                function updateWorkHours() {
+                    var amount = parseFloat(totalHidden.value) || 0;
+                    if (amount > 0) {
+                        workBox.style.display = "flex";
+                        workVal.textContent = (amount / hourlyRate).toFixed(1);
+                    } else {
+                        workBox.style.display = "none";
+                    }
+                }
+
+                var totalDisplay = document.getElementById("total_amount_display");
+                totalDisplay.addEventListener("input", updateWorkHours);
+                totalDisplay.addEventListener("keydown", function () {
+                    setTimeout(updateWorkHours, 10);
+                });
+            }
 
             // Dark mode toggle
             const toggle = document.getElementById("darkToggle");
-
-            // Apply dark class on page load if checked
             document.body.classList.toggle("dark", toggle.checked);
-
-            // Listen for toggle changes
             toggle.addEventListener("change", function () {
                 document.body.classList.toggle("dark", toggle.checked);
             });
@@ -117,6 +329,133 @@
                     otherCategoryInput.required = false;
                     otherCategoryInput.value = "";
                 }
+            });
+
+            // Budget preview - show budgeted vs actual when category is selected
+            var budgetData = {{ budget_data | tojson }};
+            var budgetPreview = document.getElementById("budgetPreview");
+            var budgetCategoryName = document.getElementById("budgetCategoryName");
+            var budgetAmount = document.getElementById("budgetAmount");
+            var budgetActual = document.getElementById("budgetActual");
+            var budgetAfter = document.getElementById("budgetAfter");
+            var budgetBarFill = document.getElementById("budgetBarFill");
+            var budgetRemaining = document.getElementById("budgetRemaining");
+            var totalAmountHidden = document.getElementById("total_amount");
+
+            function updateBudgetPreview() {
+                var cat = categorySelect.value;
+                if (!cat || !budgetData[cat]) {
+                    budgetPreview.style.display = "none";
+                    return;
+                }
+
+                var info = budgetData[cat];
+                var budgeted = info.budgeted;
+                var actual = info.actual;
+                var expenseAmount = parseFloat(totalAmountHidden.value) || 0;
+                var afterThis = actual + expenseAmount;
+
+                budgetPreview.style.display = "block";
+                budgetCategoryName.textContent = cat;
+                budgetAmount.textContent = "$" + budgeted.toFixed(2);
+                budgetActual.textContent = "$" + actual.toFixed(2);
+                budgetAfter.textContent = "$" + afterThis.toFixed(2);
+
+                // Progress bar
+                var pct = budgeted > 0 ? (afterThis / budgeted) * 100 : 0;
+                budgetBarFill.style.width = Math.min(pct, 100) + "%";
+
+                // Color coding
+                var overBudget = afterThis > budgeted && budgeted > 0;
+                var nearBudget = afterThis > budgeted * 0.85 && !overBudget;
+
+                budgetAfter.className = "budget-value" + (overBudget ? " over-budget" : nearBudget ? " near-budget" : "");
+                budgetBarFill.className = "budget-bar-fill" + (overBudget ? " over-budget" : nearBudget ? " near-budget" : "");
+
+                if (overBudget) {
+                    var overBy = afterThis - budgeted;
+                    budgetRemaining.textContent = "$" + overBy.toFixed(2) + " over budget";
+                    budgetRemaining.className = "budget-remaining over-budget";
+                } else {
+                    var remaining = budgeted - afterThis;
+                    budgetRemaining.textContent = "$" + remaining.toFixed(2) + " remaining";
+                    budgetRemaining.className = "budget-remaining";
+                }
+            }
+
+            categorySelect.addEventListener("change", updateBudgetPreview);
+
+            // Also update budget preview when amount changes
+            var totalAmountDisplay = document.getElementById("total_amount_display");
+            totalAmountDisplay.addEventListener("input", updateBudgetPreview);
+            totalAmountDisplay.addEventListener("keydown", function () {
+                setTimeout(updateBudgetPreview, 10);
+            });
+
+            // Savings goal preview - reversed colors (green = met/exceeded goal)
+            var savingsBudgetData = {{ savings_budget_data | tojson }};
+            var savingsCategorySelect = document.getElementById("savings_category");
+            var savingsGoalPreview = document.getElementById("savingsGoalPreview");
+            var savingsGoalName = document.getElementById("savingsGoalName");
+            var savingsGoalAmount = document.getElementById("savingsGoalAmount");
+            var savingsGoalActual = document.getElementById("savingsGoalActual");
+            var savingsGoalAfter = document.getElementById("savingsGoalAfter");
+            var savingsGoalBarFill = document.getElementById("savingsGoalBarFill");
+            var savingsGoalRemaining = document.getElementById("savingsGoalRemaining");
+            var savingsAmountHidden = document.getElementById("savings_amount");
+
+            function updateSavingsGoalPreview() {
+                var cat = savingsCategorySelect.value;
+                if (!cat || !savingsBudgetData[cat]) {
+                    savingsGoalPreview.style.display = "none";
+                    return;
+                }
+
+                var info = savingsBudgetData[cat];
+                var goal = info.expected;
+                var actual = info.actual;
+                var contributionAmount = parseFloat(savingsAmountHidden.value) || 0;
+                var afterThis = actual + contributionAmount;
+
+                savingsGoalPreview.style.display = "block";
+                savingsGoalName.textContent = cat;
+                savingsGoalAmount.textContent = "$" + goal.toFixed(2);
+                savingsGoalActual.textContent = "$" + actual.toFixed(2);
+                savingsGoalAfter.textContent = "$" + afterThis.toFixed(2);
+
+                // Progress bar
+                var pct = goal > 0 ? (afterThis / goal) * 100 : 0;
+                savingsGoalBarFill.style.width = Math.min(pct, 100) + "%";
+
+                // Reversed color logic: meeting/exceeding goal = green!
+                var metGoal = afterThis >= goal && goal > 0;
+                var nearGoal = afterThis >= goal * 0.85 && !metGoal;
+
+                savingsGoalAfter.className = "budget-value" + (metGoal ? " met-goal" : nearGoal ? " near-goal" : "");
+                savingsGoalBarFill.className = "budget-bar-fill" + (metGoal ? " met-goal" : nearGoal ? " near-goal" : "");
+
+                if (metGoal) {
+                    var overBy = afterThis - goal;
+                    if (overBy > 0) {
+                        savingsGoalRemaining.textContent = "$" + overBy.toFixed(2) + " over goal!";
+                    } else {
+                        savingsGoalRemaining.textContent = "Goal met!";
+                    }
+                    savingsGoalRemaining.className = "budget-remaining met-goal";
+                } else {
+                    var remaining = goal - afterThis;
+                    savingsGoalRemaining.textContent = "$" + remaining.toFixed(2) + " to go";
+                    savingsGoalRemaining.className = "budget-remaining";
+                }
+            }
+
+            savingsCategorySelect.addEventListener("change", updateSavingsGoalPreview);
+
+            // Also update savings goal preview when amount changes
+            var savingsAmountDisplay = document.getElementById("savings_amount_display");
+            savingsAmountDisplay.addEventListener("input", updateSavingsGoalPreview);
+            savingsAmountDisplay.addEventListener("keydown", function () {
+                setTimeout(updateSavingsGoalPreview, 10);
             });
         };
     </script>
