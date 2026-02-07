@@ -14,8 +14,9 @@ with open(secret_path) as f:
     creds_dict = json.load(f)
 creds = ServiceAccountCredentials.from_json_keyfile_dict(creds_dict, scope)
 client = gspread.authorize(creds)
-sheet = client.open("Official_Budget").worksheet("Expense Responses")
-income_sheet = client.open("Official_Budget").worksheet("Income")
+spreadsheet = client.open("Official_Budget")
+sheet = spreadsheet.worksheet("Expense Responses")
+income_sheet = spreadsheet.worksheet("Income")
 
 @app.route("/", methods=["GET", "POST"])
 def index():
@@ -49,7 +50,7 @@ def index():
     for m, y in months_to_load:
         tab_name = f"{month_abbrevs[m - 1]}{y}"
         try:
-            budget_ws = client.open("Official_Budget").worksheet(tab_name)
+            budget_ws = spreadsheet.worksheet(tab_name)
 
             # Expense categories: G7:I24, Bill categories: G29:I32
             expense_range = budget_ws.get('G7:I24')
@@ -85,17 +86,43 @@ def index():
             pass  # Tab not found or Google Sheets not available
 
     # Read recent expenses from Google Sheets (sorted by purchase date)
+    # Uses header row to find columns dynamically
     recent_expenses = []
+    recent_savings = []
     try:
         all_values = sheet.get_all_values()
-        data_rows = all_values[1:]  # skip header
-        data_rows.sort(key=lambda r: r[1] if r[1] else "", reverse=True)
-        for row in data_rows[:5]:
-            recent_expenses.append({
-                "date": row[1],
-                "amount": row[3],
-                "category": row[5]
-            })
+        if all_values:
+            headers = [h.strip().lower() for h in all_values[0]]
+
+            # Find expense column indices from headers
+            date_col = next((i for i, h in enumerate(headers) if 'purchase' in h and 'date' in h), 1)
+            amount_col = next((i for i, h in enumerate(headers) if 'total' in h and 'amount' in h), 3)
+            category_col = next((i for i, h in enumerate(headers) if h == 'category'), 5)
+
+            data_rows = all_values[1:]
+            data_rows.sort(key=lambda r: r[date_col] if len(r) > date_col and r[date_col] else "", reverse=True)
+            for row in data_rows[:5]:
+                amt = row[amount_col] if len(row) > amount_col else "0"
+                recent_expenses.append({
+                    "date": row[date_col] if len(row) > date_col else "",
+                    "amount": amt if amt else "0",
+                    "category": row[category_col] if len(row) > category_col else ""
+                })
+
+            # Read recent savings from columns L-P
+            # L=Timestamp(11), M=Contribute Date(12), N=Description(13), O=Amount(14), P=Category(15)
+            savings_rows = []
+            for row in all_values[1:]:
+                if len(row) > 14 and row[12]:  # col M (contribute date) exists
+                    savings_rows.append(row)
+            savings_rows.sort(key=lambda r: r[12] if r[12] else "", reverse=True)
+            for row in savings_rows[:5]:
+                amt = row[14] if len(row) > 14 else "0"
+                recent_savings.append({
+                    "date": row[12],
+                    "amount": amt if amt else "0",
+                    "category": row[15] if len(row) > 15 else ""
+                })
     except:
         pass  # Google Sheets not available (local dev)
 
@@ -167,7 +194,8 @@ def index():
             return redirect("/?submitted=expense")
 
     return render_template("index.html", today=today, submitted_type=submitted_type,
-                           recent_expenses=recent_expenses, hourly_rate=hourly_rate,
+                           recent_expenses=recent_expenses, recent_savings=recent_savings,
+                           hourly_rate=hourly_rate,
                            budget_data=budget_data, savings_budget_data=savings_budget_data)
 
 if __name__ == "__main__":

@@ -187,6 +187,30 @@
 
         <button type="submit">Submit Contribution</button>
     </form>
+
+    {% if recent_savings %}
+    <div class="recent-expenses">
+        <h3>Recent Contributions</h3>
+        <table>
+            <thead>
+                <tr>
+                    <th>Date</th>
+                    <th>Amount</th>
+                    <th>Category</th>
+                </tr>
+            </thead>
+            <tbody>
+                {% for s in recent_savings %}
+                <tr>
+                    <td>{{ s.date }}</td>
+                    <td>${{ "%.2f"|format(s.amount|float) }}</td>
+                    <td>{{ s.category }}</td>
+                </tr>
+                {% endfor %}
+            </tbody>
+        </table>
+    </div>
+    {% endif %}
     </div>
 
     </div>
