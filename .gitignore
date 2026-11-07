@@ -8,3 +8,4 @@ creds.json
 venv/
 *.xlsx
 savings_formulas.txt
+.DS_Store

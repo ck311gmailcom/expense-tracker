@@ -1,0 +1,242 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Insights</title>
+    <link rel="stylesheet" href="{{ url_for('static', filename='style.css') }}">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-180.png') }}">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Expenses">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"></script>
+</head>
+<body class="insights-page">
+    <div class="tab-wrapper wide">
+        <div class="tab-bar">
+            <a class="tab" href="/#expense">Expense</a>
+            <a class="tab" href="/#move">Move</a>
+            <a class="tab" href="/#property">Property</a>
+            <div class="tab active" id="tabCharts">Charts</div>
+            <label class="switch tab-toggle">
+                <input type="checkbox" id="darkToggle" checked>
+                <span class="slider"></span>
+            </label>
+        </div>
+    </div>
+    <div class="container wide charts-mode">
+    <div class="form-content">
+
+        {% if error %}
+        <div class="success-banner error-banner">{{ error }}</div>
+        {% else %}
+        <div class="insights-controls">
+            <select id="monthSelect" onchange="location.href='/insights?month='+this.value">
+                {% for m in months %}
+                <option value="{{ m }}" {% if m == month %}selected{% endif %}>{{ m }}</option>
+                {% endfor %}
+            </select>
+            <div class="seg" id="modeSeg">
+                <button type="button" data-mode="actual" class="on">Actual</button>
+                <button type="button" data-mode="planned">Planned</button>
+            </div>
+        </div>
+
+        <div class="kpis" id="kpis"></div>
+
+        <h3 class="chart-title">Where the money went</h3>
+        <p class="chart-hint">Tap a group to zoom into its pieces. Tap the center to zoom back out.</p>
+        <div id="sunburst" class="chart" style="height: 440px;"></div>
+
+        <h3 class="chart-title">Cash flow</h3>
+        <p class="chart-hint">Income and rent on the left, flowing into groups, then into individual items.</p>
+        <div id="sankey" class="chart" style="height: 520px;"></div>
+
+        <h3 class="chart-title">Budget vs. actual</h3>
+        <p class="chart-hint">Teal = spent within budget, red = over budget, gray = budget left.</p>
+        <div id="budget" class="chart"></div>
+
+        <h3 class="chart-title">Sinking funds</h3>
+        <div id="funds" class="chart"></div>
+        {% endif %}
+    </div>
+    </div>
+
+{% if data %}
+<script>
+    var DATA = {{ data | tojson }};
+    var FUNDS = {{ funds | tojson }};
+    var mode = "actual";
+
+    // One color per group; items inside a group use lighter shades of it
+    var GROUP_COLORS = {
+        "Bills": "#475569", "Expenses": "#0d9488", "Property": "#d97706",
+        "Savings & invest": "#2563eb", "One-time": "#e11d48", "Left over": "#94a3b8"
+    };
+    function shade(hex, i, n) {
+        var a = 1 - Math.min(0.6, (i / Math.max(n, 1)) * 0.6);
+        var r = parseInt(hex.slice(1, 3), 16), g = parseInt(hex.slice(3, 5), 16), b = parseInt(hex.slice(5, 7), 16);
+        return "rgba(" + r + "," + g + "," + b + "," + a.toFixed(2) + ")";
+    }
+    function money(v) { return "$" + Math.round(v).toLocaleString(); }
+    function dark() { return document.body.classList.contains("dark"); }
+    function baseLayout(extra) {
+        var fg = dark() ? "#e5e7eb" : "#1e293b";
+        var l = { paper_bgcolor: "rgba(0,0,0,0)", plot_bgcolor: "rgba(0,0,0,0)",
+                  font: { family: "Segoe UI, Roboto, sans-serif", color: fg, size: 12 },
+                  margin: { t: 10, l: 10, r: 10, b: 10 } };
+        for (var k in extra) l[k] = extra[k];
+        return l;
+    }
+    var CONFIG = { displayModeBar: false, responsive: true };
+
+    function groupItems(g) {
+        return (DATA.groups[g] || []).map(function (i) { return { name: i.name, v: i[mode] || 0 }; })
+                                     .filter(function (i) { return i.v > 0.004; })
+                                     .sort(function (a, b) { return b.v - a.v; });
+    }
+
+    function drawKpis() {
+        var inc = DATA.income.concat(DATA.rent).reduce(function (s, i) { return s + (i[mode] || 0); }, 0);
+        var out = 0;
+        Object.keys(DATA.groups).forEach(function (g) {
+            groupItems(g).forEach(function (i) { out += i.v; });
+        });
+        var sav = groupItems("Savings & invest").reduce(function (s, i) { return s + i.v; }, 0);
+        var left = DATA.left_over[mode] || 0;
+        var rate = inc > 0 ? Math.round(sav / inc * 100) : 0;
+        document.getElementById("kpis").innerHTML =
+            kpi("Income + rent", money(inc)) + kpi("Money out", money(out)) +
+            kpi("Savings rate", rate + "%") + kpi("Left over", money(left), left < 0);
+    }
+    function kpi(label, val, neg) {
+        return '<div class="kpi"><span>' + label + '</span><strong' + (neg ? ' class="neg"' : '') + '>' + val + '</strong></div>';
+    }
+
+    function drawSunburst() {
+        var ids = ["root"], labels = ["Total"], parents = [""], values = [0], colors = ["rgba(0,0,0,0)"];
+        var total = 0;
+        Object.keys(DATA.groups).forEach(function (g) {
+            var items = groupItems(g);
+            var sum = items.reduce(function (s, i) { return s + i.v; }, 0);
+            if (sum <= 0) return;
+            ids.push(g); labels.push(g); parents.push("root"); values.push(sum); colors.push(GROUP_COLORS[g]);
+            items.forEach(function (it, k) {
+                ids.push(g + "/" + it.name); labels.push(it.name); parents.push(g); values.push(it.v);
+                colors.push(shade(GROUP_COLORS[g], k + 1, items.length + 1));
+            });
+            total += sum;
+        });
+        var left = DATA.left_over[mode] || 0;
+        if (left > 0) {
+            ids.push("Left over"); labels.push("Left over"); parents.push("root"); values.push(left);
+            colors.push(GROUP_COLORS["Left over"]); total += left;
+        }
+        values[0] = total;
+        labels[0] = money(total);
+        Plotly.react("sunburst", [{
+            type: "sunburst", ids: ids, labels: labels, parents: parents, values: values,
+            branchvalues: "total", marker: { colors: colors, line: { color: dark() ? "#1e1e1e" : "#fff", width: 1 } },
+            hovertemplate: "<b>%{label}</b><br>%{value:$,.2f}<br>%{percentRoot:.1%} of total<extra></extra>",
+            texttemplate: "%{label}<br>%{value:$,.0f}", insidetextorientation: "radial", maxdepth: 2
+        }], baseLayout({}), CONFIG);
+    }
+
+    function drawSankey() {
+        var nodes = [], nodeColors = [], idx = {};
+        function node(name, color) {
+            if (!(name in idx)) { idx[name] = nodes.length; nodes.push(name); nodeColors.push(color); }
+            return idx[name];
+        }
+        var src = [], dst = [], val = [], linkColors = [];
+        function link(a, b, v, c) { if (v > 0.004) { src.push(a); dst.push(b); val.push(v); linkColors.push(c); } }
+        var avail = node("Available", "#64748b");
+        DATA.income.concat(DATA.rent).forEach(function (i) {
+            link(node(i.name, "#16a34a"), avail, i[mode] || 0, "rgba(22,163,74,0.25)");
+        });
+        Object.keys(DATA.groups).forEach(function (g) {
+            var items = groupItems(g);
+            if (!items.length) return;
+            // keep the chart readable: top 6 items per group, the rest as "Other <group>"
+            var shown = items.slice(0, 6), rest = items.slice(6).reduce(function (s, i) { return s + i.v; }, 0);
+            if (rest > 0) shown.push({ name: "Other " + g.toLowerCase(), v: rest });
+            var sum = items.reduce(function (s, i) { return s + i.v; }, 0);
+            var gi = node(g, GROUP_COLORS[g]);
+            link(avail, gi, sum, shade(GROUP_COLORS[g], 3, 4));
+            shown.forEach(function (it) { link(gi, node(it.name + " ", GROUP_COLORS[g]), it.v, shade(GROUP_COLORS[g], 3, 4)); });
+        });
+        var left = DATA.left_over[mode] || 0;
+        if (left > 0) link(avail, node("Left over", GROUP_COLORS["Left over"]), left, "rgba(148,163,184,0.35)");
+        Plotly.react("sankey", [{
+            type: "sankey", arrangement: "snap",
+            node: { label: nodes, color: nodeColors, pad: 12, thickness: 14,
+                    hovertemplate: "<b>%{label}</b><br>%{value:$,.2f}<extra></extra>" },
+            link: { source: src, target: dst, value: val, color: linkColors,
+                    hovertemplate: "%{source.label} → %{target.label}<br>%{value:$,.2f}<extra></extra>" }
+        }], baseLayout({ font: { size: 11, color: dark() ? "#e5e7eb" : "#1e293b" } }), CONFIG);
+    }
+
+    function drawBudget() {
+        var rows = (DATA.groups["Expenses"] || []).concat(DATA.groups["Bills"] || [])
+            .filter(function (r) { return r.planned > 0 || r.actual > 0; })
+            .map(function (r) { return { name: r.name, b: r.planned, a: r.actual, over: r.actual - r.planned }; })
+            .sort(function (x, y) { return x.over - y.over; });  // most over budget ends up on top
+        var names = rows.map(function (r) { return r.name; });
+        var within = rows.map(function (r) { return Math.min(r.a, r.b); });
+        var over = rows.map(function (r) { return Math.max(0, r.a - r.b); });
+        var left = rows.map(function (r) { return Math.max(0, r.b - r.a); });
+        var custom = rows.map(function (r) { return [r.b, r.a]; });
+        var hover = "<b>%{y}</b><br>Budget %{customdata[0]:$,.2f}<br>Spent %{customdata[1]:$,.2f}<extra></extra>";
+        function trace(name, x, color) {
+            return { type: "bar", orientation: "h", name: name, y: names, x: x, customdata: custom,
+                     marker: { color: color }, hovertemplate: hover,
+                     text: x.map(function (v) { return v > 0 ? money(v) : ""; }), textposition: "inside",
+                     insidetextanchor: "middle" };
+        }
+        document.getElementById("budget").style.height = Math.max(260, rows.length * 30 + 60) + "px";
+        Plotly.react("budget", [trace("Spent (within budget)", within, "#0f766e"),
+                                trace("Over budget", over, "#dc2626"),
+                                trace("Budget left", left, dark() ? "#3a3a3a" : "#e2e8f0")],
+            baseLayout({ barmode: "stack", showlegend: true, legend: { orientation: "h", y: 1.08 },
+                         margin: { t: 30, l: 140, r: 10, b: 30 },
+                         xaxis: { tickprefix: "$", gridcolor: dark() ? "#333" : "#e2e8f0" } }), CONFIG);
+    }
+
+    function drawFunds() {
+        var f = FUNDS.filter(function (x) { return x.name; });
+        if (!f.length) { document.getElementById("funds").innerHTML = "<p class='chart-hint'>No funds yet.</p>"; return; }
+        var names = f.map(function (x) { return x.name; });
+        var bal = f.map(function (x) { return Math.max(0, x.balance); });
+        var togo = f.map(function (x) { return Math.max(0, (x.target || 0) - x.balance); });
+        document.getElementById("funds").style.height = Math.max(200, f.length * 40 + 60) + "px";
+        Plotly.react("funds", [
+            { type: "bar", orientation: "h", name: "Saved", y: names, x: bal, marker: { color: "#2563eb" },
+              text: f.map(function (x) { return money(x.balance) + (x.target ? " of " + money(x.target) : ""); }),
+              textposition: "auto", hovertemplate: "<b>%{y}</b><br>Saved %{x:$,.2f}<extra></extra>" },
+            { type: "bar", orientation: "h", name: "To go", y: names, x: togo, marker: { color: dark() ? "#3a3a3a" : "#e2e8f0" },
+              hovertemplate: "<b>%{y}</b><br>%{x:$,.2f} to go<extra></extra>" }
+        ], baseLayout({ barmode: "stack", showlegend: false, margin: { t: 10, l: 140, r: 10, b: 30 },
+                        xaxis: { tickprefix: "$", gridcolor: dark() ? "#333" : "#e2e8f0" } }), CONFIG);
+    }
+
+    function drawAll() { drawKpis(); drawSunburst(); drawSankey(); drawBudget(); drawFunds(); }
+
+    document.querySelectorAll("#modeSeg button").forEach(function (b) {
+        b.addEventListener("click", function () {
+            mode = b.dataset.mode;
+            document.querySelectorAll("#modeSeg button").forEach(function (x) { x.classList.toggle("on", x === b); });
+            drawAll();
+        });
+    });
+    var toggle = document.getElementById("darkToggle");
+    document.body.classList.toggle("dark", toggle.checked);
+    toggle.addEventListener("change", function () { document.body.classList.toggle("dark", toggle.checked); drawAll(); });
+    drawAll();
+</script>
+{% else %}
+<script>
+    var toggle = document.getElementById("darkToggle");
+    document.body.classList.toggle("dark", toggle.checked);
+    toggle.addEventListener("change", function () { document.body.classList.toggle("dark", toggle.checked); });
+</script>
+{% endif %}
+</body>
+</html>

@@ -5,7 +5,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import os, json, re, logging, time
 
-APP_VERSION = "3.1"
+APP_VERSION = "3.2"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -433,6 +433,121 @@ def index():
         accounts=lists["accounts"], move_types=MOVE_TYPES, one_time=ONE_TIME,
         units=UNITS, property_types=PROPERTY_TYPES, schedule_e=SCHEDULE_E_CATEGORIES,
         property_name=PROPERTY_NAME)
+
+
+# ---------------------------------------------------------------------------
+# Insights page (interactive Plotly charts)
+# ---------------------------------------------------------------------------
+NEW_LAYOUT_START = (2026, 11)   # month tabs before Nov2026 use the old layout
+INSIGHT_RANGES = {
+    "income": "B11:D15", "savings": "B20:D27", "expenses": "G11:I26", "bills": "B33:D37",
+    "onetime": "J37:J38", "realestate": "B43:D49", "summary": "G43:I49",
+}
+
+
+def list_month_tabs():
+    """Month tabs (MonYYYY) on the current layout, newest first. Cached 10 min."""
+    def _fetch():
+        tabs = []
+        for ws in spreadsheet.worksheets():
+            m = re.fullmatch(r"([A-Z][a-z]{2})(\d{4})", ws.title)
+            if m and m.group(1) in MONTH_ABBR:
+                y, mo = int(m.group(2)), MONTH_ABBR.index(m.group(1)) + 1
+                if (y, mo) >= NEW_LAYOUT_START:
+                    tabs.append(((y, mo), ws.title))
+        return [t for _, t in sorted(tabs, reverse=True)]
+    return cache_get('month_list', 600, _fetch)
+
+
+def get_insights(tab):
+    """Everything the Insights charts need for one month, as planned/actual pairs."""
+    def _fetch():
+        ws = spreadsheet.worksheet(tab)
+        keys = list(INSIGHT_RANGES)
+        vals = dict(zip(keys, ws.batch_get([INSIGHT_RANGES[k] for k in keys],
+                                           value_render_option='UNFORMATTED_VALUE')))
+
+        def rows(block, plan_col=1, act_col=2):
+            out = []
+            for r in vals[block]:
+                if not r or is_blank(r[0]) or str(r[0]).strip() in SKIP_CATEGORIES:
+                    continue
+                out.append({"name": str(r[0]).strip(),
+                            "planned": parse_number(r[plan_col]) if len(r) > plan_col else 0.0,
+                            "actual": parse_number(r[act_col]) if len(r) > act_col else 0.0})
+            return out
+
+        expenses = []
+        for r in vals["expenses"]:   # keep Subscriptions here (it's a real cost)
+            if r and not is_blank(r[0]) and str(r[0]).strip() not in {"Not in a category", "Total"}:
+                expenses.append({"name": str(r[0]).strip(),
+                                 "planned": parse_number(r[1]) if len(r) > 1 else 0.0,
+                                 "actual": parse_number(r[2]) if len(r) > 2 else 0.0})
+        unmatched = next((r for r in vals["expenses"] if r and str(r[0]).strip() == "Not in a category"), None)
+        if unmatched and len(unmatched) > 2 and parse_number(unmatched[2]):
+            expenses.append({"name": "Not in a category", "planned": 0.0, "actual": parse_number(unmatched[2])})
+        onetime = vals["onetime"]
+        one_nf = parse_number(onetime[1][0]) if len(onetime) > 1 and onetime[1] else 0.0
+
+        re_rows = {str(r[0]).strip(): r for r in vals["realestate"] if r and not is_blank(r[0])}
+        def re_val(prefix, col):
+            r = next((v for k, v in re_rows.items() if k.startswith(prefix)), None)
+            return parse_number(r[col]) if r and len(r) > col else 0.0
+        rent = [{"name": k, "planned": parse_number(v[1]) if len(v) > 1 else 0.0,
+                 "actual": parse_number(v[2]) if len(v) > 2 else 0.0}
+                for k, v in re_rows.items() if k.startswith("Rent")]
+        property_out = [
+            {"name": "Mortgage payment", "planned": re_val("Mortgage", 1), "actual": re_val("Mortgage", 2)},
+            {"name": "Property expenses", "planned": re_val("Other property", 1), "actual": re_val("Other property", 2)},
+        ]
+        summary = {str(r[0]).strip(): r for r in vals["summary"] if r and not is_blank(r[0])}
+        left = summary.get("Left over", [])
+        return {
+            "month": tab,
+            "income": rows("income"), "rent": rent,
+            "groups": {
+                "Bills": rows("bills"),
+                "Expenses": expenses,
+                "Property": property_out,
+                "Savings & invest": rows("savings"),
+                "One-time": [{"name": "One-time (no fund)", "planned": 0.0, "actual": one_nf}],
+            },
+            "left_over": {"planned": parse_number(left[1]) if len(left) > 1 else 0.0,
+                          "actual": parse_number(left[2]) if len(left) > 2 else 0.0},
+        }
+    return cache_get(f'insights_{tab}', 300, _fetch)
+
+
+def get_fund_progress():
+    def _fetch():
+        try:
+            rows_ = spreadsheet.values_batch_get(["Funds!A5:H14"], params={"valueRenderOption": "UNFORMATTED_VALUE"})
+            vals = rows_.get("valueRanges", [{}])[0].get("values", [])
+            return [{"name": str(r[0]).strip(), "target": parse_number(r[1]) if len(r) > 1 else 0.0,
+                     "plan": parse_number(r[3]) if len(r) > 3 else 0.0,
+                     "balance": parse_number(r[7]) if len(r) > 7 else 0.0}
+                    for r in vals if r and not is_blank(r[0])]
+        except Exception as e:
+            logger.error(f"Error reading Funds: {e}")
+            return []
+    return cache_get('fund_progress', 300, _fetch)
+
+
+@app.route("/insights")
+def insights():
+    months = list_month_tabs()
+    tab = request.args.get("month") or (months[0] if months else None)
+    data, error = None, None
+    if tab not in months:
+        error = "No month tabs on the new layout yet."
+    else:
+        try:
+            data = get_insights(tab)
+        except Exception as e:
+            logger.error(f"Error building insights for {tab}: {e}")
+            error = f"Couldn't read {tab}."
+    return render_template("insights.html", months=months, month=tab, data=data,
+                           funds=get_fund_progress(), error=error)
 
 
 if __name__ == "__main__":

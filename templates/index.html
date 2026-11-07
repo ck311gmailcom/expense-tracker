@@ -15,6 +15,7 @@
             <div class="tab active" id="tabExpense" onclick="switchTab('expense')">Expense</div>
             <div class="tab" id="tabSavings" onclick="switchTab('savings')">Move</div>
             <div class="tab" id="tabProperty" onclick="switchTab('property')">Property</div>
+            <a class="tab" href="/insights">Charts</a>
             <label class="switch tab-toggle">
                 <input type="checkbox" id="darkToggle" checked>
                 <span class="slider"></span>
@@ -323,6 +324,10 @@
         }
 
         window.onload = function () {
+
+            // Coming back from the Charts page (/#move, /#property)
+            var hashTab = {"#move": "savings", "#property": "property"}[location.hash];
+            if (hashTab) { switchTab(hashTab); history.replaceState(null, "", "/"); }
 
             // Auto-dismiss success banner after 3 seconds and clean URL
             const banner = document.getElementById("successBanner");
