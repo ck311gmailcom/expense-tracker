@@ -68,7 +68,7 @@
 
     // One color per group; items inside a group use lighter shades of it
     var GROUP_COLORS = {
-        "Bills": "#475569", "Expenses": "#0d9488", "Property": "#d97706",
+        "Bills": "#475569", "Expenses": "#0891b2", "Property": "#d97706",
         "Savings & invest": "#2563eb", "One-time": "#e11d48", "Left over": "#94a3b8"
     };
     function shade(hex, i, n) {
@@ -192,7 +192,7 @@
                      insidetextanchor: "middle" };
         }
         document.getElementById("budget").style.height = Math.max(260, rows.length * 30 + 60) + "px";
-        Plotly.react("budget", [trace("Spent (within budget)", within, "#0f766e"),
+        Plotly.react("budget", [trace("Spent (within budget)", within, "#0891b2"),
                                 trace("Over budget", over, "#dc2626"),
                                 trace("Budget left", left, dark() ? "#3a3a3a" : "#e2e8f0")],
             baseLayout({ barmode: "stack", showlegend: true, legend: { orientation: "h", y: 1.08 },
