@@ -1,89 +1,102 @@
+/**
+ * Budget Tools: monthly rollover for the Official_Budget sheet.
+ *
+ * Run it from the month tab you want to roll forward (e.g. Nov2026).
+ * It copies that tab, names the copy for the next month (Dec2026), and
+ * resets the cells you fill in by hand each month.
+ *
+ * Layout this script expects (Nov2026 redesign, Nov 2026):
+ *   B2            Month text, e.g. "November 2026" (every formula keys off this)
+ *   D11:D15       Income actuals (typed by hand)          -> cleared
+ *   D48           Mortgage principal actually paid        -> cleared
+ *   D55:D69       Accounts: Start of Month                -> set to last month's Actual End
+ *   G55:G69       Accounts: Actual End                    -> cleared
+ *   I55:I70       Account notes + net cash variance note  -> cleared
+ * Budgets, bills and planned savings are kept so you only change what moved.
+ *
+ * Note: Apps Script is blocked on the work account. Open the sheet while
+ * signed in to your personal Gmail to see the Budget Tools menu.
+ */
+
+// Cells that hold this month's typed-in actuals. Edit here if the layout changes.
+var LAYOUT = {
+  monthCell: "B2",
+  clearRanges: ["D11:D15", "D48", "G55:G69", "I55:I70"],
+  accountStart: "D55:D69",
+  accountActualEnd: "G55:G69"
+};
+
+var MONTHS = ["January", "February", "March", "April", "May", "June",
+              "July", "August", "September", "October", "November", "December"];
+var SHORT = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
+             "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
+
 function rolloverMonth() {
   var ss = SpreadsheetApp.getActiveSpreadsheet();
   var ui = SpreadsheetApp.getUi();
   var sheet = ss.getActiveSheet();
 
-  // Get current month/year from B2
-  var monthYearText = sheet.getRange("B2").getValue();
-
-  var months = ["January", "February", "March", "April", "May", "June",
-                "July", "August", "September", "October", "November", "December"];
-  var shortMonths = ["Jan", "Feb", "Mar", "Apr", "May", "Jun",
-                     "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-
-  // Parse current month and year from B2
-  var parts = monthYearText.toString().trim().split(" ");
-  if (parts.length < 2) {
-    ui.alert("Error: B2 should be in format 'January 2026'. Found: " + monthYearText);
+  // 1. Read and parse the month in B2 ("November 2026")
+  var monthText = String(sheet.getRange(LAYOUT.monthCell).getDisplayValue()).trim();
+  var parts = monthText.split(/\s+/);
+  var monthIndex = MONTHS.indexOf(parts[0]);
+  var year = parseInt(parts[1], 10);
+  if (parts.length < 2 || monthIndex === -1 || isNaN(year)) {
+    ui.alert("Run this from a month tab. B2 should look like 'November 2026' but it says: '" + monthText + "'.");
     return;
   }
 
-  var monthName = parts[0];
-  var year = parseInt(parts[1]);
-  var currentMonthIndex = months.indexOf(monthName);
+  // 2. Work out next month's label and tab name
+  var nextIndex = (monthIndex + 1) % 12;
+  var nextYear = nextIndex === 0 ? year + 1 : year;
+  var nextLabel = MONTHS[nextIndex] + " " + nextYear;   // "December 2026"
+  var nextTab = SHORT[nextIndex] + nextYear;            // "Dec2026"
 
-  if (currentMonthIndex === -1) {
-    ui.alert("Error: Could not parse month from B2: " + monthName);
+  if (ss.getSheetByName(nextTab)) {
+    ui.alert("Tab '" + nextTab + "' already exists. Delete or rename it first if you want to roll over again.");
     return;
   }
 
-  // Calculate next month
-  var nextMonthIndex = (currentMonthIndex + 1) % 12;
-  var nextYear = nextMonthIndex === 0 ? year + 1 : year;
-  var nextMonthFull = months[nextMonthIndex] + " " + nextYear;
-  var nextTabName = shortMonths[nextMonthIndex] + nextYear;
+  // 3. Warn if account balances for this month haven't been entered yet
+  var actualEnds = sheet.getRange(LAYOUT.accountActualEnd).getValues();
+  var anyEntered = actualEnds.some(function (r) { return r[0] !== ""; });
+  var warning = anyEntered ? "" :
+    "\n\nHeads up: no Actual End balances are filled in on this tab, so next month's Start of Month will be blank.";
 
-  // Check if next month tab already exists
-  if (ss.getSheetByName(nextTabName)) {
-    ui.alert("Tab '" + nextTabName + "' already exists! Delete it first if you want to re-roll.");
-    return;
-  }
-
-  // Confirm with user
-  var response = ui.alert(
-    "Rollover to " + nextMonthFull + "?",
+  var answer = ui.alert(
+    "Roll over to " + nextLabel + "?",
     "This will:\n" +
-    "• Duplicate this tab as '" + nextTabName + "'\n" +
-    "• Update the month to " + nextMonthFull + "\n" +
-    "• Reset manual actuals (Misc Income, Plug Number) to 0\n" +
-    "• Expense + savings formulas will auto-update for the new month",
+    "- Copy this tab as '" + nextTab + "' and put it first\n" +
+    "- Set the month to " + nextLabel + "\n" +
+    "- Carry this month's Actual End balances into Start of Month\n" +
+    "- Clear income actuals, principal paid, Actual End and notes\n" +
+    "- Keep all budgets and planned amounts" + warning,
     ui.ButtonSet.YES_NO
   );
+  if (answer !== ui.Button.YES) return;
 
-  if (response !== ui.Button.YES) return;
-
-  // Duplicate the current sheet
-  var newSheet = sheet.copyTo(ss);
-  newSheet.setName(nextTabName);
-
-  // Move new sheet right after the current one
-  var currentIndex = sheet.getIndex();
+  // 4. Copy the tab (charts, formatting and formulas come with it)
+  var newSheet = sheet.copyTo(ss).setName(nextTab);
   ss.setActiveSheet(newSheet);
-  ss.moveActiveSheet(currentIndex + 1);
+  ss.moveActiveSheet(1);
 
-  // Update B2 to the new month
-  newSheet.getRange("B2").setValue(nextMonthFull);
+  // 5. New month label. Every formula on the tab reads B2.
+  newSheet.getRange(LAYOUT.monthCell).setValue(nextLabel);
 
-  // Reset hardcoded actual values to 0 for the new month
-  // D7  = Miscellaneous income actual
-  // D37 = Plug Number actual
-  // NOTE: D30-D32 (Roth IRA, Investments, Savings) are now formula-driven
-  //       via SUMPRODUCT pulling from Expense Responses, so they auto-update
-  //       when B2 changes to the new month — do NOT reset them.
-  var cellsToReset = ["D7", "D37"];
-  cellsToReset.forEach(function(cellRef) {
-    newSheet.getRange(cellRef).setValue(0);
+  // 6. Last month's Actual End becomes this month's Start of Month (values only)
+  newSheet.getRange(LAYOUT.accountStart).setValues(actualEnds);
+
+  // 7. Clear the typed-in actuals for the new month
+  LAYOUT.clearRanges.forEach(function (a1) {
+    newSheet.getRange(a1).clearContent();
   });
 
-  // Switch to the new sheet
-  ss.setActiveSheet(newSheet);
-
-  ui.alert("Done! '" + nextTabName + "' has been created.\n\n" +
-           "Expense + savings actuals will auto-populate from Expense Responses for " + nextMonthFull + ".\n" +
-           "Fill in miscellaneous income actuals as the month progresses.");
+  ui.alert("Done. '" + nextTab + "' is ready.\n\n" +
+           "Expenses, savings, rent and property costs fill in automatically from the logs.\n" +
+           "Type income actuals as paychecks land, and account balances at month end.");
 }
 
-// Adds a custom menu to the spreadsheet
+// Adds the Budget Tools menu when the sheet opens
 function onOpen() {
   SpreadsheetApp.getUi()
     .createMenu("Budget Tools")
