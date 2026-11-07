@@ -13,7 +13,7 @@
     <div class="tab-wrapper">
         <div class="tab-bar">
             <div class="tab active" id="tabExpense" onclick="switchTab('expense')">Expense</div>
-            <div class="tab" id="tabSavings" onclick="switchTab('savings')">Savings</div>
+            <div class="tab" id="tabSavings" onclick="switchTab('savings')">Move</div>
             <div class="tab" id="tabProperty" onclick="switchTab('property')">Property</div>
             <label class="switch tab-toggle">
                 <input type="checkbox" id="darkToggle" checked>
@@ -26,8 +26,10 @@
 
     {% if submitted_type == 'expense' %}
     <div class="success-banner" id="successBanner">Expense submitted!</div>
-    {% elif submitted_type == 'savings' %}
-    <div class="success-banner savings-banner" id="successBanner">Savings contribution submitted!</div>
+    {% elif submitted_type == 'move' %}
+    <div class="success-banner savings-banner" id="successBanner">Money move saved!</div>
+    {% elif submitted_type == 'move_error' %}
+    <div class="success-banner error-banner" id="successBanner">Not saved: pick a different From and To (and make sure both still exist in the sheet).</div>
     {% elif submitted_type == 'property' %}
     <div class="success-banner property-banner" id="successBanner">Property entry saved!</div>
     {% endif %}
@@ -133,32 +135,33 @@
     {% endif %}
     </div>
 
-    <!-- ================= Savings Form ================= -->
+    <!-- ================= Move Money Form ================= -->
     <div id="savingsForm" style="display: none;">
-    <form method="POST" action="/">
-        <input type="hidden" name="form_type" value="savings">
+    <form method="POST" action="/" id="moveFormEl">
+        <input type="hidden" name="form_type" value="move">
 
-        <label for="contribute_date">Contribute Date:</label>
-        <input type="date" id="contribute_date" name="contribute_date" value="{{ today }}" required>
-
-        <label for="savings_description">Description:</label>
-        <input type="text" id="savings_description" name="savings_description" required>
-
-        <label for="savings_amount_display">Total Amount ($):</label>
-        <input type="text" inputmode="numeric" id="savings_amount_display" placeholder="0.00" required>
-        <input type="hidden" id="savings_amount" name="savings_amount">
-
-        <select id="savings_category" name="savings_category" required>
-            <option value="" disabled selected>-- Category --</option>
-            {% for c in savings_categories %}
-            <option value="{{ c }}">{{ c }}</option>
+        <label for="move_type">Type:</label>
+        <select id="move_type" name="move_type">
+            {% for t in move_types %}
+            <option value="{{ t }}">{{ t }}</option>
             {% endfor %}
-            <optgroup label="Sinking funds">
-                {% for f in funds %}
-                <option value="{{ f }}">{{ f }}</option>
-                {% endfor %}
-            </optgroup>
         </select>
+        <div class="field-hint" id="moveTypeHint"></div>
+
+        <label for="move_date">Date:</label>
+        <input type="date" id="move_date" name="move_date" value="{{ today }}" required>
+
+        <label for="move_from">From:</label>
+        <select id="move_from" name="move_from" required></select>
+        <div class="balance-hint" id="fromBalance"></div>
+
+        <label for="move_to">To:</label>
+        <select id="move_to" name="move_to" required></select>
+        <div class="balance-hint" id="toBalance"></div>
+
+        <label for="move_amount_display">Amount ($):</label>
+        <input type="text" inputmode="numeric" id="move_amount_display" placeholder="0.00" required>
+        <input type="hidden" id="move_amount" name="move_amount">
 
         <div class="budget-preview savings-goal-preview" id="savingsGoalPreview" style="display: none;">
             <div class="budget-header" id="savingsGoalName"></div>
@@ -171,7 +174,7 @@
                 <span class="budget-value" id="savingsGoalActual"></span>
             </div>
             <div class="budget-row">
-                <span class="budget-label">After this contribution:</span>
+                <span class="budget-label">After this move:</span>
                 <span class="budget-value" id="savingsGoalAfter"></span>
             </div>
             <div class="budget-bar-container">
@@ -181,17 +184,23 @@
             <div class="budget-remaining" id="savingsGoalRemaining"></div>
         </div>
 
-        <button type="submit">Submit Contribution</button>
+        <label for="move_description">Description (Optional):</label>
+        <input type="text" id="move_description" name="move_description" placeholder="e.g. Paycheck to savings">
+
+        <label for="move_notes">Notes (Optional):</label>
+        <input type="text" id="move_notes" name="move_notes">
+
+        <button type="submit">Save Move</button>
     </form>
 
-    {% if recent_savings %}
+    {% if recent_moves %}
     <div class="recent-expenses">
-        <h3>Recent Contributions</h3>
+        <h3>Recent Moves</h3>
         <table>
-            <thead><tr><th>Date</th><th>Amount</th><th>Category</th></tr></thead>
+            <thead><tr><th>Date</th><th>Amount</th><th>From → To</th></tr></thead>
             <tbody>
-                {% for s in recent_savings %}
-                <tr><td>{{ s.date }}</td><td>${{ "%.2f"|format(s.amount|float) }}</td><td>{{ s.category }}</td></tr>
+                {% for m in recent_moves %}
+                <tr><td>{{ m.date }}</td><td>${{ "%.2f"|format(m.amount|float) }}</td><td>{{ m.category }}</td></tr>
                 {% endfor %}
             </tbody>
         </table>
@@ -318,8 +327,10 @@
             // Auto-dismiss success banner after 3 seconds and clean URL
             const banner = document.getElementById("successBanner");
             if (banner) {
-                {% if submitted_type in ['savings', 'property'] %}
-                switchTab('{{ submitted_type }}');
+                {% if submitted_type in ['move', 'move_error'] %}
+                switchTab('savings');
+                {% elif submitted_type == 'property' %}
+                switchTab('property');
                 {% endif %}
                 history.replaceState(null, "", "/");
                 setTimeout(function () {
@@ -363,7 +374,7 @@
 
             setupCurrencyInput("total_amount_display", "total_amount");
             setupCurrencyInput("tip_amount_display", "tip_amount");
-            setupCurrencyInput("savings_amount_display", "savings_amount");
+            
 
             // ---- Hours of work calculator ----
             var hourlyRate = {{ hourly_rate if hourly_rate else 'null' }};
@@ -477,25 +488,106 @@
             totalAmountDisplay.addEventListener("input", updateBudgetPreview);
             totalAmountDisplay.addEventListener("keydown", function () { setTimeout(updateBudgetPreview, 10); });
 
-            // ---- Savings goal preview ----
-            var savingsCategorySelect = document.getElementById("savings_category");
+            // ---- Move Money form ----
+            var accounts = {{ accounts | tojson }};
+            var funds = {{ funds | tojson }};
+            var balances = {{ balances | tojson }};
+            var CASH = ["Checking", "Savings"];
+            var moveType = document.getElementById("move_type");
+            var moveFrom = document.getElementById("move_from");
+            var moveTo = document.getElementById("move_to");
+            var moveDate = document.getElementById("move_date");
+            var moveAmountHidden = document.getElementById("move_amount");
             var savingsGoalPreview = document.getElementById("savingsGoalPreview");
-            var savingsAmountHidden = document.getElementById("savings_amount");
-            var contributeDateInput = document.getElementById("contribute_date");
-            function updateSavingsGoalPreview() {
-                var cat = savingsCategorySelect.value;
-                var key = dateToMonthKey(contributeDateInput.value);
-                var data = key ? allSavingsBudgetData[key] : null;
-                if (!cat || !data || !data[cat]) { savingsGoalPreview.style.display = "none"; return; }
-                savingsGoalPreview.style.display = "block";
-                renderPreview("savingsGoal", cat + " (" + key + ")", data[cat].expected, data[cat].actual,
-                              parseFloat(savingsAmountHidden.value) || 0, true);
+            var typeHints = {
+                "Transfer": "Moving money between accounts or into a fund. Moving into Roth IRA, Brokerage, HYSA or a fund counts toward that savings goal.",
+                "Credit Card Payment": "Paying a card from a cash account. Doesn't change net cash, since the card balance drops by the same amount.",
+                "Fund Move": "Re-labeling money between sinking funds (e.g. Vacation to Emergency Fund). No money leaves your savings account."
+            };
+            var setMoveAmount = setupCurrencyInput("move_amount_display", "move_amount", updateGoalPreview);
+
+            function acctOptions(filterFn, label) {
+                var g = document.createElement("optgroup"); g.label = label;
+                accounts.filter(filterFn).forEach(function (a) {
+                    var o = document.createElement("option"); o.value = a.name; o.textContent = a.name; g.appendChild(o);
+                });
+                return g.children.length ? g : null;
             }
-            savingsCategorySelect.addEventListener("change", updateSavingsGoalPreview);
-            contributeDateInput.addEventListener("change", updateSavingsGoalPreview);
-            var savingsAmountDisplay = document.getElementById("savings_amount_display");
-            savingsAmountDisplay.addEventListener("input", updateSavingsGoalPreview);
-            savingsAmountDisplay.addEventListener("keydown", function () { setTimeout(updateSavingsGoalPreview, 10); });
+            function fundOptions() {
+                var g = document.createElement("optgroup"); g.label = "Sinking funds";
+                funds.forEach(function (f) {
+                    var o = document.createElement("option"); o.value = f; o.textContent = f + " (fund)"; g.appendChild(o);
+                });
+                return g;
+            }
+            function fill(sel, groups) {
+                var keep = sel.value;
+                sel.innerHTML = "";
+                var ph = document.createElement("option"); ph.value = ""; ph.textContent = "-- Choose --"; ph.disabled = true; ph.selected = true;
+                sel.appendChild(ph);
+                groups.forEach(function (g) { if (g) sel.appendChild(g); });
+                if (Array.prototype.some.call(sel.options, function (o) { return o.value === keep && keep; })) sel.value = keep;
+            }
+            var isCash = function (a) { return CASH.indexOf(a.type) !== -1; };
+            var isCard = function (a) { return a.type === "Credit Card"; };
+            var isInvest = function (a) { return a.type === "Brokerage" || a.type === "Retirement"; };
+            var isOther = function (a) { return ["Loan", "Mortgage", "Property"].indexOf(a.type) !== -1; };
+
+            function updateMoveOptions() {
+                var t = moveType.value;
+                document.getElementById("moveTypeHint").textContent = typeHints[t] || "";
+                if (t === "Credit Card Payment") {
+                    fill(moveFrom, [acctOptions(isCash, "Cash accounts")]);
+                    fill(moveTo, [acctOptions(isCard, "Credit cards")]);
+                } else if (t === "Fund Move") {
+                    fill(moveFrom, [fundOptions()]);
+                    fill(moveTo, [fundOptions()]);
+                } else {
+                    var groups = function () { return [acctOptions(isCash, "Cash accounts"), fundOptions(),
+                        acctOptions(isInvest, "Investments & retirement"), acctOptions(isCard, "Credit cards"), acctOptions(isOther, "Other")]; };
+                    fill(moveFrom, groups());
+                    fill(moveTo, groups());
+                }
+                showBalance(moveFrom, "fromBalance");
+                showBalance(moveTo, "toBalance");
+                updateGoalPreview();
+            }
+            function showBalance(sel, id) {
+                var el = document.getElementById(id);
+                var b = balances[sel.value];
+                if (!sel.value) { el.textContent = ""; return; }
+                if (!b) { el.textContent = "No balance on file yet (enter Start of Month on the month tab)."; return; }
+                var a = accounts.find(function (x) { return x.name === sel.value; });
+                var owed = a && ["Credit Card", "Loan", "Mortgage"].indexOf(a.type) !== -1;
+                el.textContent = (owed ? "Owed: $" : "Last known: $") +
+                    b.balance.toLocaleString(undefined, {minimumFractionDigits: 2, maximumFractionDigits: 2}) + " (" + b.note + ")";
+            }
+            function goalFor(name) {
+                if (funds.indexOf(name) !== -1) return name;
+                var a = accounts.find(function (x) { return x.name === name; });
+                return a && a.goal ? a.goal : null;
+            }
+            function updateGoalPreview() {
+                var goal = goalFor(moveTo.value);
+                var key = dateToMonthKey(moveDate.value);
+                var data = key ? allSavingsBudgetData[key] : null;
+                if (moveType.value === "Credit Card Payment" || !goal || !data || !data[goal]) {
+                    savingsGoalPreview.style.display = "none"; return;
+                }
+                savingsGoalPreview.style.display = "block";
+                renderPreview("savingsGoal", goal + " (" + key + ")", data[goal].expected, data[goal].actual,
+                              parseFloat(moveAmountHidden.value) || 0, true);
+            }
+            moveType.addEventListener("change", updateMoveOptions);
+            moveFrom.addEventListener("change", function () { showBalance(moveFrom, "fromBalance"); });
+            moveTo.addEventListener("change", function () { showBalance(moveTo, "toBalance"); updateGoalPreview(); });
+            moveDate.addEventListener("change", updateGoalPreview);
+            document.getElementById("moveFormEl").addEventListener("submit", function (e) {
+                if (moveFrom.value && moveFrom.value === moveTo.value) {
+                    e.preventDefault(); alert("From and To can't be the same.");
+                }
+            });
+            updateMoveOptions();
 
             // ---- Property form ----
             var typeSel = document.getElementById("property_type");

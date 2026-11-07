@@ -66,7 +66,7 @@ function rolloverMonth() {
   var answer = ui.alert(
     "Roll over to " + nextLabel + "?",
     "This will:\n" +
-    "- Copy this tab as '" + nextTab + "' and put it first\n" +
+    "- Copy this tab as '" + nextTab + "' next to this one\n" +
     "- Set the month to " + nextLabel + "\n" +
     "- Carry this month's Actual End balances into Start of Month\n" +
     "- Clear income actuals, principal paid, Actual End and notes\n" +
@@ -75,10 +75,12 @@ function rolloverMonth() {
   );
   if (answer !== ui.Button.YES) return;
 
-  // 4. Copy the tab (charts, formatting and formulas come with it)
+  // 4. Copy the tab (charts, formatting and formulas come with it) and place
+  //    it just left of this month's tab, so the newest month sits in the same spot
+  var position = sheet.getIndex();
   var newSheet = sheet.copyTo(ss).setName(nextTab);
   ss.setActiveSheet(newSheet);
-  ss.moveActiveSheet(1);
+  ss.moveActiveSheet(position);
 
   // 5. New month label. Every formula on the tab reads B2.
   newSheet.getRange(LAYOUT.monthCell).setValue(nextLabel);

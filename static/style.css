@@ -671,3 +671,27 @@ body.dark .field-hint { color: #999; }
 @media (max-width: 600px) {
     .tab { padding: 10px 18px; }
 }
+
+/* ===== Move Money tab ===== */
+.balance-hint {
+    font-size: 0.8rem;
+    color: #2a5db0;
+    margin: -14px 0 16px 2px;
+}
+body.dark .balance-hint { color: #6ba3e8; }
+.success-banner.error-banner { background-color: #dc3545; }
+
+/* ===== Date inputs: stop iOS Safari from pushing the box off-screen ===== */
+input[type="date"] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    min-width: 0;
+    max-width: 100%;
+    min-height: 42px;
+    text-align: left;
+    background-color: #fff;
+    color: inherit;
+}
+input[type="date"]::-webkit-date-and-time-value { text-align: left; }
+body.dark input[type="date"] { background-color: #2a2a2a; }
