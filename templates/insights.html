@@ -7,7 +7,10 @@
     <link rel="apple-touch-icon" href="{{ url_for('static', filename='icon-180.png') }}">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-title" content="Expenses">
-    <script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"></script>
+    <!-- Plotly: official CDN first, then two backups in case one is blocked or down -->
+    <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+    <script>window.Plotly || document.write('<script src="https://cdn.jsdelivr.net/npm/plotly.js-dist-min@2.35.2/plotly.min.js"><\/script>');</script>
+    <script>window.Plotly || document.write('<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"><\/script>');</script>
 </head>
 <body class="insights-page">
     <div class="tab-wrapper wide">
@@ -217,7 +220,29 @@
                         xaxis: { tickprefix: "$", gridcolor: dark() ? "#333" : "#e2e8f0" } }), CONFIG);
     }
 
-    function drawAll() { drawKpis(); drawSunburst(); drawSankey(); drawBudget(); drawFunds(); }
+    // Draw each chart separately so one failure doesn't blank the whole page,
+    // and show the reason on screen instead of failing silently
+    function safe(id, fn) {
+        try { fn(); }
+        catch (e) {
+            var el = document.getElementById(id);
+            if (el) { el.style.height = "auto"; el.innerHTML = "<p class='chart-error'>Chart error: " + e.message + "</p>"; }
+            console.error(id, e);
+        }
+    }
+    function drawAll() {
+        safe("kpis", drawKpis);
+        if (!window.Plotly) {
+            ["sunburst", "sankey", "budget", "funds"].forEach(function (id) {
+                var el = document.getElementById(id);
+                el.style.height = "auto";
+                el.innerHTML = "<p class='chart-error'>The chart library didn't load. Check your connection, or turn off any content blocker for this site, then reload.</p>";
+            });
+            return;
+        }
+        safe("sunburst", drawSunburst); safe("sankey", drawSankey);
+        safe("budget", drawBudget); safe("funds", drawFunds);
+    }
 
     document.querySelectorAll("#modeSeg button").forEach(function (b) {
         b.addEventListener("click", function () {

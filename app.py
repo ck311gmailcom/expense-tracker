@@ -5,7 +5,7 @@ import gspread
 from oauth2client.service_account import ServiceAccountCredentials
 import os, json, re, logging, time
 
-APP_VERSION = "3.2"
+APP_VERSION = "3.2.1"
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 

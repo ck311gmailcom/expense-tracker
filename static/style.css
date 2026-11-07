@@ -730,3 +730,4 @@ body.dark .chart-hint { color: #999; }
     .tab { padding: 10px 12px; font-size: 0.88rem; }
     .kpis { grid-template-columns: repeat(2, 1fr); }
 }
+.chart-error { color: #dc2626; font-size: 0.85rem; padding: 10px; border: 1px dashed #dc2626; border-radius: 6px; }
