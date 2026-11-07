@@ -624,3 +624,50 @@ body.dark button:hover {
 .switch input:checked + .slider:before {
     transform: translateX(21px);
 }
+/* ===== Property tab (amber accent) ===== */
+.property-mode #tabProperty.active::after { background-color: #d97706; }
+body.dark .property-mode #tabProperty.active::after { background-color: #f59e0b; }
+.property-mode.container { border-radius: 10px 10px 10px 10px; }
+.property-mode button { background-color: #d97706; }
+.property-mode button:hover { background-color: #b45309; }
+body.dark .property-mode button { background-color: #b45309; }
+body.dark .property-mode button:hover { background-color: #92400e; }
+.success-banner.property-banner { background-color: #d97706; }
+
+.property-name {
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+    text-transform: uppercase;
+    color: #b45309;
+    margin-bottom: 12px;
+}
+body.dark .property-name { color: #f59e0b; }
+
+.mortgage-box {
+    background-color: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 6px;
+    padding: 12px 14px 4px 14px;
+    margin-bottom: 16px;
+    font-size: 0.9rem;
+}
+.mortgage-box input { margin-bottom: 8px; }
+body.dark .mortgage-box { background-color: #2a2213; border-color: #5c4a1c; }
+
+/* Small helper text under a field */
+.field-hint {
+    font-size: 0.78rem;
+    color: #777;
+    margin: -14px 0 16px 2px;
+    line-height: 1.35;
+}
+.mortgage-box .field-hint { margin: 0 0 10px 2px; }
+body.dark .field-hint { color: #999; }
+
+.receipt-label { margin: 0 0 16px 0; }
+
+/* Three tabs need a little less padding on phones */
+@media (max-width: 600px) {
+    .tab { padding: 10px 18px; }
+}
